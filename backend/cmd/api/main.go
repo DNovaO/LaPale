@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"paleteria-system/internal/auth"
+	"paleteria-system/internal/bitacora"
 	"paleteria-system/internal/config"
 	"paleteria-system/internal/database"
 	"paleteria-system/internal/finanzas"
@@ -48,6 +49,7 @@ func main() {
 	inventario.RegisterRoutes(api, db)
 	ventas.RegisterRoutes(api, db)
 	finanzas.RegisterRoutes(api, db)
+	bitacora.RegisterRoutes(api, db)
 
 	log.Printf("🚀 Servidor corriendo en puerto %s [%s]", config.AppConfig.AppPort, config.AppConfig.AppEnv)
 	log.Fatal(app.Listen(":" + config.AppConfig.AppPort))

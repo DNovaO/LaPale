@@ -3,6 +3,10 @@ package auth
 import (
 	"encoding/json"
 	"errors"
+
+	"paleteria-system/pkg/claims"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 var (
@@ -23,14 +27,13 @@ func (s *Service) Login(req LoginRequest) (*LoginResponse, error) {
 	if err != nil {
 		return nil, ErrCredencialesInvalidas
 	}
-	// Usuario no existe — mismo mensaje que contraseña incorrecta (no revelar info)
 	if user == nil {
 		return nil, ErrCredencialesInvalidas
 	}
 	if !user.Activo {
 		return nil, ErrUsuarioInactivo
 	}
-	if err := CheckPassword(req.Password, user.PasswordHash); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		return nil, ErrCredencialesInvalidas
 	}
 
@@ -57,8 +60,8 @@ func (s *Service) Login(req LoginRequest) (*LoginResponse, error) {
 	}, nil
 }
 
-func parsePermisos(raw []byte) (Permisos, error) {
-	var p Permisos
+func parsePermisos(raw []byte) (claims.Permisos, error) {
+	var p claims.Permisos
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return p, err
 	}

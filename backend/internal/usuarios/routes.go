@@ -2,6 +2,7 @@ package usuarios
 
 import (
 	"paleteria-system/internal/auth"
+	"paleteria-system/internal/bitacora"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -10,8 +11,8 @@ import (
 func RegisterRoutes(router fiber.Router, db *pgxpool.Pool) {
 	repo := NewRepository(db)
 	service := NewService(repo)
-	handler := NewHandler(service)
-
+	b := bitacora.NewService(db)
+	handler := NewHandler(service, b)
 	// Todas requieren estar autenticado y ser administrador
 	u := router.Group("/usuarios",
 		auth.Middleware(),

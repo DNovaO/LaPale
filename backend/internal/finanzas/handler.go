@@ -4,17 +4,19 @@ import (
 	"errors"
 
 	"paleteria-system/internal/auth"
+	"paleteria-system/internal/bitacora"
 	"paleteria-system/pkg/response"
 
 	"github.com/gofiber/fiber/v2"
 )
 
 type Handler struct {
-	service *Service
+	service  *Service
+	bitacora *bitacora.Service
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, b *bitacora.Service) *Handler {
+	return &Handler{service: service, bitacora: b}
 }
 
 // ── Gastos ───────────────────────────────────────────────────
@@ -39,6 +41,16 @@ func (h *Handler) CreateGasto(c *fiber.Ctx) error {
 			return response.Error(c, 500, "error al registrar gasto")
 		}
 	}
+	h.bitacora.Log(bitacora.Registro{
+		UsuarioID:   claims.UserID,
+		SucursalID:  claims.SucursalID,
+		Modulo:      bitacora.ModuloFinanzas,
+		Accion:      bitacora.AccionRegistrarGasto,
+		Entidad:     "gastos",
+		EntidadID:   g.ID,
+		DatosNuevos: fiber.Map{"tipo": g.Tipo, "monto": g.Monto},
+		IPAddress:   c.IP(),
+	})
 	return response.Created(c, g)
 }
 
@@ -110,6 +122,19 @@ func (h *Handler) CerrarCaja(c *fiber.Ctx) error {
 	if err != nil {
 		return response.Error(c, 500, "error al cerrar caja")
 	}
+	h.bitacora.Log(bitacora.Registro{
+		UsuarioID:  claims.UserID,
+		SucursalID: claims.SucursalID,
+		Modulo:     bitacora.ModuloCaja,
+		Accion:     bitacora.AccionCerrarCaja,
+		Entidad:    "cierres_caja",
+		EntidadID:  cierre.ID,
+		DatosNuevos: fiber.Map{
+			"total_ventas": cierre.TotalVentas,
+			"total_gastos": cierre.TotalGastos,
+		},
+		IPAddress: c.IP(),
+	})
 	return response.Created(c, cierre)
 }
 

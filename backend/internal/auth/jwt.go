@@ -5,29 +5,19 @@ import (
 	"os"
 	"time"
 
+	"paleteria-system/pkg/claims"
+
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// Claims contiene todo lo que los handlers necesitan saber del usuario
-// sin tocar la base de datos en cada request
-type Claims struct {
-	UserID     string   `json:"user_id"`
-	Username   string   `json:"username"`
-	Nombre     string   `json:"nombre"`
-	RolNombre  string   `json:"rol"`
-	SucursalID string   `json:"sucursal_id"`
-	Permisos   Permisos `json:"permisos"`
-	jwt.RegisteredClaims
-}
-
-func GenerateJWT(user *User, permisos Permisos) (string, error) {
+func GenerateJWT(user *User, permisos claims.Permisos) (string, error) {
 	expStr := os.Getenv("JWT_EXPIRES")
 	exp, err := time.ParseDuration(expStr)
 	if err != nil {
-		exp = 24 * time.Hour // fallback seguro
+		exp = 24 * time.Hour
 	}
 
-	claims := Claims{
+	uc := claims.UserClaims{
 		UserID:     user.ID,
 		Username:   user.Username,
 		Nombre:     user.Nombre,
@@ -40,12 +30,12 @@ func GenerateJWT(user *User, permisos Permisos) (string, error) {
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, uc)
 	return token.SignedString([]byte(os.Getenv("JWT_SECRET")))
 }
 
-func ParseJWT(tokenStr string) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (interface{}, error) {
+func ParseJWT(tokenStr string) (*claims.UserClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenStr, &claims.UserClaims{}, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("método de firma inesperado")
 		}
@@ -54,10 +44,9 @@ func ParseJWT(tokenStr string) (*Claims, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	claims, ok := token.Claims.(*Claims)
+	uc, ok := token.Claims.(*claims.UserClaims)
 	if !ok || !token.Valid {
 		return nil, errors.New("token inválido")
 	}
-	return claims, nil
+	return uc, nil
 }

@@ -4,17 +4,19 @@ import (
 	"errors"
 
 	"paleteria-system/internal/auth"
+	"paleteria-system/internal/bitacora"
 	"paleteria-system/pkg/response"
 
 	"github.com/gofiber/fiber/v2"
 )
 
 type Handler struct {
-	service *Service
+	service  *Service
+	bitacora *bitacora.Service
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, b *bitacora.Service) *Handler {
+	return &Handler{service: service, bitacora: b}
 }
 
 func (h *Handler) GetAll(c *fiber.Ctx) error {

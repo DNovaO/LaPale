@@ -1,0 +1,39 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-brand-500: #f97316;
+  --color-brand-600: #ea6c0a;
+  --color-brand-700: #c2550a;
+
+  --color-surface-900: #0f0f11;
+  --color-surface-800: #18181c;
+  --color-surface-700: #222228;
+  --color-surface-600: #2c2c35;
+  --color-surface-500: #3a3a46;
+  --color-surface-400: #52525f;
+
+  --color-light-50:  #ffffff;
+  --color-light-100: #f8f8fa;
+  --color-light-200: #f0f0f4;
+  --color-light-300: #e4e4ea;
+  --color-light-400: #c8c8d4;
+  --color-light-500: #9898a8;
+
+  --color-error:   #ef4444;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-info:    #3b82f6;
+
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { font-family: var(--font-sans); }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #3a3a46; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #52525f; }
+
+@variant dark (&:where(.dark, .dark *));

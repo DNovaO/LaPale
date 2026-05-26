@@ -4,17 +4,19 @@ import (
 	"errors"
 
 	"paleteria-system/internal/auth"
+	"paleteria-system/internal/bitacora"
 	"paleteria-system/pkg/response"
 
 	"github.com/gofiber/fiber/v2"
 )
 
 type Handler struct {
-	service *Service
+	service  *Service
+	bitacora *bitacora.Service
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, b *bitacora.Service) *Handler {
+	return &Handler{service: service, bitacora: b}
 }
 
 // ── Productos ────────────────────────────────────────────────
@@ -55,6 +57,17 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 		}
 		return response.Error(c, 500, "error al crear producto")
 	}
+
+	h.bitacora.Log(bitacora.Registro{
+		UsuarioID:   claims.UserID,
+		SucursalID:  claims.SucursalID,
+		Modulo:      bitacora.ModuloInventario,
+		Accion:      bitacora.AccionCrear,
+		Entidad:     "productos",
+		EntidadID:   p.ID,
+		DatosNuevos: p,
+		IPAddress:   c.IP(),
+	})
 	return response.Created(c, p)
 }
 
@@ -130,6 +143,20 @@ func (h *Handler) RegistrarMovimiento(c *fiber.Ctx) error {
 			return response.Error(c, 500, "error al registrar movimiento")
 		}
 	}
+	h.bitacora.Log(bitacora.Registro{
+		UsuarioID:  claims.UserID,
+		SucursalID: claims.SucursalID,
+		Modulo:     bitacora.ModuloInventario,
+		Accion:     bitacora.AccionEntradaStock,
+		Entidad:    "movimientos_inventario",
+		EntidadID:  m.ID,
+		DatosNuevos: fiber.Map{
+			"tipo":     m.Tipo,
+			"cantidad": m.Cantidad,
+			"producto": m.ProductoID,
+		},
+		IPAddress: c.IP(),
+	})
 	return response.Created(c, m)
 }
 
