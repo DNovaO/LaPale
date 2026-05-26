@@ -1,0 +1,43 @@
+services:
+
+  postgres:
+    image: postgres:16
+
+    container_name: paleteria_postgres
+
+    restart: always
+
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: paleteria_db
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  backend:
+    build:
+      context: ./backend
+
+    container_name: paleteria_backend
+
+    restart: always
+
+    depends_on:
+      - postgres
+
+    ports:
+      - "8080:8080"
+
+    volumes:
+      - ./backend:/app
+
+    env_file:
+      - ./backend/.env
+
+volumes:
+  postgres_data:
