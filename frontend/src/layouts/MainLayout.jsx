@@ -84,7 +84,10 @@ export default function MainLayout({ children }) {
   const { theme, toggle }   = useTheme()
   const navigate             = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const isDark = theme === 'dark'
+
+  const closeMobile = () => setMobileOpen(false)
 
   const handleLogout = () => {
     logout()
@@ -109,188 +112,200 @@ export default function MainLayout({ children }) {
     navActiveIcon: '#B6CD38',
   }
 
-  return (
-    <div style={{
-      display: 'flex', minHeight: '100vh',
-      background: C.body,
-      fontFamily: "'Inter', system-ui, sans-serif",
-    }}>
+  const sidebarBaseStyle = {
+    width: collapsed ? 64 : 220,
+    minHeight: '100vh',
+    background: C.sidebar.bg,
+    borderRight: `1px solid ${C.sidebar.border}`,
+    display: 'flex', flexDirection: 'column',
+    transition: 'width .25s cubic-bezier(.4,0,.2,1)',
+    overflow: 'hidden',
+    flexShrink: 0,
+    position: 'sticky', top: 0, height: '100vh',
+    zIndex: 40,
+  }
 
-      {/* Sidebar */}
-      <aside style={{
-        width: collapsed ? 64 : 220,
-        minHeight: '100vh',
-        background: C.sidebar.bg,
-        borderRight: `1px solid ${C.sidebar.border}`,
-        display: 'flex', flexDirection: 'column',
-        transition: 'width .25s cubic-bezier(.4,0,.2,1)',
-        overflow: 'hidden',
-        flexShrink: 0,
-        position: 'sticky', top: 0, height: '100vh',
-        zIndex: 40,
+  return (
+    <>
+      <style>{`
+        @media (max-width: 768px) {
+          .sidebar-desktop { display: none !important; }
+          .sidebar-mobile { display: flex !important; }
+        }
+        @media (min-width: 769px) {
+          .sidebar-mobile { display: none !important; }
+        }
+      `}</style>
+
+      <div style={{
+        display: 'flex', minHeight: '100vh',
+        background: C.body,
+        fontFamily: "'Inter', system-ui, sans-serif",
       }}>
 
-        {/* Logo */}
-        <div style={{
-          padding: collapsed ? '20px 0' : '20px 16px',
-          display: 'flex', alignItems: 'center',
-          gap: 10, borderBottom: `1px solid ${C.sidebar.border}`,
-          justifyContent: collapsed ? 'center' : 'flex-start',
-          minHeight: 64,
-        }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: 10, flexShrink: 0,
-            background: 'linear-gradient(135deg, #B6CD38 0%, #00753F 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 12px -2px rgba(0,117,63,0.4)',
-          }}>
-            <span style={{ color: 'white', fontWeight: 700, fontSize: 14 }}>P</span>
+        {/* Desktop Sidebar */}
+        <aside className="sidebar-desktop" style={sidebarBaseStyle}>
+          <SidebarContent />
+        </aside>
+
+        {/* Mobile Sidebar Overlay */}
+        {mobileOpen && (
+          <div className="sidebar-mobile" style={{ position: 'fixed', inset: 0, zIndex: 50 }}>
+            <div onClick={closeMobile} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }} />
+            <aside style={{ ...sidebarBaseStyle, width: 220, position: 'absolute', top: 0, left: 0, bottom: 0 }}>
+              <SidebarContent />
+            </aside>
           </div>
-          {!collapsed && (
-            <span style={{ color: C.text, fontWeight: 700, fontSize: 15, whiteSpace: 'nowrap' }}>
-              La Pale
-            </span>
-          )}
-        </div>
+        )}
 
-        {/* Nav */}
-        <nav style={{ flex: 1, padding: '12px 8px', overflowY: 'auto' }}>
-          {navItems.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              style={({ isActive }) => ({
-                display: 'flex', alignItems: 'center',
-                gap: 10, padding: collapsed ? '10px 0' : '9px 12px',
-                borderRadius: 10, marginBottom: 2,
-                textDecoration: 'none', cursor: 'pointer',
-                justifyContent: collapsed ? 'center' : 'flex-start',
-                background: isActive ? C.navActive : 'transparent',
-                color: isActive ? C.navActiveText : C.subtext,
-                fontWeight: isActive ? 600 : 400,
-                fontSize: 13,
-                transition: 'background .15s, color .15s',
-                whiteSpace: 'nowrap',
-              })}
-              onMouseEnter={e => {
-                if (!e.currentTarget.getAttribute('aria-current'))
-                  e.currentTarget.style.background = C.navHover
-              }}
-              onMouseLeave={e => {
-                if (!e.currentTarget.getAttribute('aria-current'))
-                  e.currentTarget.style.background = 'transparent'
-              }}
-            >
-              {({ isActive }) => (
-                <>
-                  <span style={{ color: isActive ? C.navActiveIcon : C.subtext, flexShrink: 0 }}>
-                    <Icon />
-                  </span>
-                  {!collapsed && label}
-                </>
-              )}
-            </NavLink>
-          ))}
-        </nav>
+        {/* Main Content */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
 
-        {/* User + logout */}
-        <div style={{
-          padding: '12px 8px',
-          borderTop: `1px solid ${C.sidebar.border}`,
-        }}>
-          {!collapsed && (
-            <div style={{
-              padding: '8px 12px', borderRadius: 10, marginBottom: 6,
-              background: isDark ? 'rgba(35,122,170,0.08)' : 'rgba(29,84,125,0.05)',
-            }}>
-              <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {user?.nombre}
-              </p>
-              <p style={{ margin: 0, fontSize: 11, color: C.subtext, marginTop: 2 }}>
-                {user?.rol}
-              </p>
-            </div>
-          )}
-          <button
-            onClick={handleLogout}
-            style={{
-              width: '100%', padding: collapsed ? '10px 0' : '9px 12px',
-              borderRadius: 10, border: 'none', cursor: 'pointer',
-              background: 'transparent', display: 'flex', alignItems: 'center',
-              gap: 10, color: '#E72D8B', fontSize: 13, fontWeight: 500,
-              justifyContent: collapsed ? 'center' : 'flex-start',
-              transition: 'background .15s',
-              fontFamily: 'inherit',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(231,45,139,0.08)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <IcLogout />
-            {!collapsed && 'Cerrar sesión'}
-          </button>
-        </div>
-      </aside>
-
-      {/* Contenido principal */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-
-        {/* Header */}
-        <header style={{
-          height: 64, padding: '0 24px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: C.header.bg,
-          borderBottom: `1px solid ${C.header.border}`,
-          backdropFilter: 'blur(12px)',
-          position: 'sticky', top: 0, zIndex: 30,
-        }}>
-          <button
-            onClick={() => setCollapsed(c => !c)}
-            style={{
-              padding: 8, borderRadius: 8, border: 'none',
-              background: 'transparent', cursor: 'pointer',
-              color: C.subtext, display: 'flex',
-              transition: 'background .15s',
-              fontFamily: 'inherit',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = C.navHover}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <IcMenu />
-          </button>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {/* Toggle tema */}
+          <header style={{
+            height: 64, padding: '0 24px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: C.header.bg,
+            borderBottom: `1px solid ${C.header.border}`,
+            backdropFilter: 'blur(12px)',
+            position: 'sticky', top: 0, zIndex: 30,
+          }}>
             <button
-              onClick={toggle}
+              onClick={() => window.innerWidth <= 768 ? setMobileOpen(o => !o) : setCollapsed(c => !c)}
               style={{
+                padding: 8, borderRadius: 8, border: 'none',
+                background: 'transparent', cursor: 'pointer',
+                color: C.subtext, display: 'flex',
+                transition: 'background .15s',
+                fontFamily: 'inherit',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = C.navHover}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <IcMenu />
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button onClick={toggle} style={{
                 padding: 8, borderRadius: 8,
                 border: `1px solid ${isDark ? 'rgba(35,122,170,0.3)' : 'rgba(29,84,125,0.2)'}`,
                 background: 'transparent', cursor: 'pointer',
                 color: isDark ? '#B6CD38' : '#1D547D',
                 display: 'flex', transition: 'all .15s',
                 fontFamily: 'inherit',
-              }}
-            >
-              {isDark ? <IcSun /> : <IcMoon />}
-            </button>
-
-            {/* Avatar */}
-            <div style={{
-              width: 32, height: 32, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #1D547D 0%, #237AAA 100%)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'white', fontWeight: 700, fontSize: 13,
-            }}>
-              {user?.nombre?.charAt(0)?.toUpperCase()}
+              }}>
+                {isDark ? <IcSun /> : <IcMoon />}
+              </button>
+              <div style={{
+                width: 32, height: 32, borderRadius: '50%',
+                background: 'linear-gradient(135deg, #1D547D 0%, #237AAA 100%)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'white', fontWeight: 700, fontSize: 13,
+              }}>
+                {user?.nombre?.charAt(0)?.toUpperCase()}
+              </div>
             </div>
-          </div>
-        </header>
+          </header>
 
-        {/* Page content */}
-        <main style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
-          {children}
-        </main>
+          <main style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </>
   )
+
+  function SidebarContent() { return (
+    <>
+      {/* Logo */}
+      <div style={{
+        padding: collapsed ? '20px 0' : '20px 16px',
+        display: 'flex', alignItems: 'center',
+        gap: 10, borderBottom: `1px solid ${C.sidebar.border}`,
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        minHeight: 64,
+      }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+          background: 'linear-gradient(135deg, #B6CD38 0%, #00753F 100%)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 4px 12px -2px rgba(0,117,63,0.4)',
+        }}>
+          <span style={{ color: 'white', fontWeight: 700, fontSize: 14 }}>P</span>
+        </div>
+        {!collapsed && (
+          <span style={{ color: C.text, fontWeight: 700, fontSize: 15, whiteSpace: 'nowrap' }}>
+            La Pale
+          </span>
+        )}
+      </div>
+
+      {/* Nav */}
+      <nav style={{ flex: 1, padding: '12px 8px', overflowY: 'auto' }}>
+        {navItems.map(({ to, label, icon: Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            onClick={closeMobile}
+            style={({ isActive }) => ({
+              display: 'flex', alignItems: 'center',
+              gap: 10, padding: collapsed ? '10px 0' : '9px 12px',
+              borderRadius: 10, marginBottom: 2,
+              textDecoration: 'none', cursor: 'pointer',
+              justifyContent: collapsed ? 'center' : 'flex-start',
+              background: isActive ? C.navActive : 'transparent',
+              color: isActive ? C.navActiveText : C.subtext,
+              fontWeight: isActive ? 600 : 400,
+              fontSize: 13,
+              transition: 'background .15s, color .15s',
+              whiteSpace: 'nowrap',
+            })}
+            onMouseEnter={e => {
+              if (!e.currentTarget.getAttribute('aria-current'))
+                e.currentTarget.style.background = C.navHover
+            }}
+            onMouseLeave={e => {
+              if (!e.currentTarget.getAttribute('aria-current'))
+                e.currentTarget.style.background = 'transparent'
+            }}
+          >
+            {({ isActive }) => (
+              <>
+                <span style={{ color: isActive ? C.navActiveIcon : C.subtext, flexShrink: 0 }}>
+                  <Icon />
+                </span>
+                {!collapsed && label}
+              </>
+            )}
+          </NavLink>
+        ))}
+      </nav>
+
+      {/* User + logout */}
+      <div style={{ padding: '12px 8px', borderTop: `1px solid ${C.sidebar.border}` }}>
+        {!collapsed && (
+          <div style={{ padding: '8px 12px', borderRadius: 10, marginBottom: 6,
+            background: isDark ? 'rgba(35,122,170,0.08)' : 'rgba(29,84,125,0.05)' }}>
+            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {user?.nombre}
+            </p>
+            <p style={{ margin: 0, fontSize: 11, color: C.subtext, marginTop: 2 }}>{user?.rol}</p>
+          </div>
+        )}
+        <button onClick={handleLogout} style={{
+          width: '100%', padding: collapsed ? '10px 0' : '9px 12px',
+          borderRadius: 10, border: 'none', cursor: 'pointer',
+          background: 'transparent', display: 'flex', alignItems: 'center',
+          gap: 10, color: '#E72D8B', fontSize: 13, fontWeight: 500,
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          transition: 'background .15s', fontFamily: 'inherit',
+        }}
+        onMouseEnter={e => e.currentTarget.style.background = 'rgba(231,45,139,0.08)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        >
+          <IcLogout />
+          {!collapsed && 'Cerrar sesión'}
+        </button>
+      </div>
+    </>
+  )}
 }

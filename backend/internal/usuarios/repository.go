@@ -119,3 +119,21 @@ func (r *Repository) UpdatePassword(id, passwordHash string) error {
 	`, passwordHash, id)
 	return err
 }
+
+func (r *Repository) FindRoles() ([]Rol, error) {
+	rows, err := r.db.Query(context.Background(), `SELECT id, nombre FROM roles ORDER BY nombre`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var roles []Rol
+	for rows.Next() {
+		var rol Rol
+		if err := rows.Scan(&rol.ID, &rol.Nombre); err != nil {
+			return nil, err
+		}
+		roles = append(roles, rol)
+	}
+	return roles, nil
+}

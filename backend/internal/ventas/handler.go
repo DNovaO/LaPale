@@ -58,8 +58,15 @@ func (h *Handler) Confirmar(c *fiber.Ctx) error {
 		return response.Error(c, 400, "body inválido")
 	}
 
-	// Vendedor sin permiso de cortesía no puede crearlas
-	if req.Tipo == TipoCortesia && !claims.Permisos.PuedeCortesia {
+	// Verificar si algun item es cortesia y el usuario no tiene permiso
+	tieneCortesia := false
+	for _, d := range req.Detalle {
+		if d.EsCortesia {
+			tieneCortesia = true
+			break
+		}
+	}
+	if tieneCortesia && !claims.Permisos.PuedeCortesia {
 		return response.Error(c, 403, "no tienes permiso para registrar cortesías")
 	}
 
@@ -70,18 +77,26 @@ func (h *Handler) Confirmar(c *fiber.Ctx) error {
 			return response.Error(c, 400, "la venta debe tener al menos un producto")
 		case errors.Is(err, ErrMetodoPagoInvalido):
 			return response.Error(c, 400, "método de pago inválido: EFECTIVO, TARJETA, TRANSFERENCIA")
-		case errors.Is(err, ErrCortesiaSinAutorizar):
-			return response.Error(c, 400, "las cortesías requieren el campo autorizado_por")
 		case errors.Is(err, ErrProductoInactivo):
 			return response.Error(c, 400, "uno o más productos están inactivos")
 		default:
-			// Stock insuficiente viene como error con mensaje descriptivo
 			return response.Error(c, 400, err.Error())
 		}
 	}
 	accion := bitacora.AccionConfirmarVenta
-	if venta.Tipo == TipoCortesia {
-		accion = bitacora.AccionRegistrarCortesia
+	for _, d := range venta.Detalle {
+		if d.EsCortesia {
+			accion = bitacora.AccionRegistrarCortesia
+			break
+		}
+	}
+	resumenProds := make([]fiber.Map, len(venta.Detalle))
+	for i, d := range venta.Detalle {
+		resumenProds[i] = fiber.Map{
+			"nombre":   d.ProductoNombre,
+			"cantidad": d.Cantidad,
+			"precio":   d.PrecioUnitario,
+		}
 	}
 	h.bitacora.Log(bitacora.Registro{
 		UsuarioID:  claims.UserID,
@@ -91,9 +106,12 @@ func (h *Handler) Confirmar(c *fiber.Ctx) error {
 		Entidad:    "ventas",
 		EntidadID:  venta.ID,
 		DatosNuevos: fiber.Map{
-			"ticket": venta.TicketNumero,
-			"total":  venta.Total,
-			"tipo":   venta.Tipo,
+			"ticket":    venta.TicketNumero,
+			"total":     venta.Total,
+			"tipo":      venta.Tipo,
+			"metodo":    req.Pago.Metodo,
+			"productos": resumenProds,
+			"vendedor":  claims.Nombre,
 		},
 		IPAddress: c.IP(),
 	})
@@ -120,6 +138,13 @@ func (h *Handler) Cancelar(c *fiber.Ctx) error {
 			return response.Error(c, 500, "error al cancelar venta")
 		}
 	}
+	v, _ := h.service.GetByID(c.Params("id"))
+	ticket := 0
+	total := 0.0
+	if v != nil {
+		ticket = v.TicketNumero
+		total = v.Total
+	}
 	h.bitacora.Log(bitacora.Registro{
 		UsuarioID:   claims.UserID,
 		SucursalID:  claims.SucursalID,
@@ -127,8 +152,12 @@ func (h *Handler) Cancelar(c *fiber.Ctx) error {
 		Accion:      bitacora.AccionCancelarVenta,
 		Entidad:     "ventas",
 		EntidadID:   c.Params("id"),
-		DatosNuevos: fiber.Map{"motivo": req.Motivo},
-		IPAddress:   c.IP(),
+		DatosNuevos: fiber.Map{
+			"motivo": req.Motivo,
+			"ticket": ticket,
+			"total":  total,
+		},
+		IPAddress: c.IP(),
 	})
 	return response.Success(c, fiber.Map{"message": "venta cancelada"})
 }

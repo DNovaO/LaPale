@@ -24,8 +24,9 @@ func NewHandler(service *Service, b *bitacora.Service) *Handler {
 func (h *Handler) GetAll(c *fiber.Ctx) error {
 	claims := auth.GetClaims(c)
 	soloActivos := c.QueryBool("activos", false)
+	tipo := c.Query("tipo")
 
-	productos, err := h.service.GetAll(claims.SucursalID, soloActivos)
+	productos, err := h.service.GetAll(claims.SucursalID, soloActivos, tipo)
 	if err != nil {
 		return response.Error(c, 500, "error al obtener productos")
 	}
@@ -50,10 +51,10 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 		return response.Error(c, 400, "body inválido")
 	}
 
-	p, err := h.service.Create(claims.SucursalID, req)
+	p, err := h.service.Create(claims.SucursalID, claims.UserID, req)
 	if err != nil {
 		if errors.Is(err, ErrDatosRequeridos) {
-			return response.Error(c, 400, "nombre y precio son requeridos")
+			return response.Error(c, 400, "nombre es requerido y precio si no tiene presentaciones")
 		}
 		return response.Error(c, 500, "error al crear producto")
 	}
@@ -82,7 +83,7 @@ func (h *Handler) Update(c *fiber.Ctx) error {
 		case errors.Is(err, ErrProductoNoEncontrado):
 			return response.Error(c, 404, "producto no encontrado")
 		case errors.Is(err, ErrDatosRequeridos):
-			return response.Error(c, 400, "nombre y precio son requeridos")
+			return response.Error(c, 400, err.Error())
 		default:
 			return response.Error(c, 500, "error al actualizar producto")
 		}
@@ -114,6 +115,38 @@ func (h *Handler) GetBajoStock(c *fiber.Ctx) error {
 		return response.Error(c, 500, "error al obtener productos")
 	}
 	return response.Success(c, productos)
+}
+
+func (h *Handler) Delete(c *fiber.Ctx) error {
+	claims := auth.GetClaims(c)
+	id := c.Params("id")
+
+	p, err := h.service.GetByID(id)
+	if err != nil {
+		return response.Error(c, 500, "error al obtener producto")
+	}
+	if p == nil {
+		return response.Error(c, 404, "producto no encontrado")
+	}
+
+	if err := h.service.Delete(id); err != nil {
+		if errors.Is(err, ErrTieneVentas) {
+			return response.Error(c, 400, err.Error())
+		}
+		return response.Error(c, 500, "error al eliminar producto")
+	}
+
+	h.bitacora.Log(bitacora.Registro{
+		UsuarioID:   claims.UserID,
+		SucursalID:  claims.SucursalID,
+		Modulo:      bitacora.ModuloInventario,
+		Accion:      bitacora.AccionEliminar,
+		Entidad:     "productos",
+		EntidadID:   id,
+		DatosNuevos: fiber.Map{"nombre": p.Nombre, "sku": p.SKU},
+		IPAddress:   c.IP(),
+	})
+	return response.Success(c, fiber.Map{"message": "producto eliminado"})
 }
 
 // ── Movimientos ──────────────────────────────────────────────

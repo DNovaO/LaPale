@@ -25,7 +25,7 @@ type DetalleVenta struct {
 	VentaID        string  `json:"venta_id"`
 	ProductoID     string  `json:"producto_id"`
 	ProductoNombre string  `json:"producto_nombre"`
-	Cantidad       int     `json:"cantidad"`
+	Cantidad       float64 `json:"cantidad"`
 	PrecioUnitario float64 `json:"precio_unitario"`
 	Subtotal       float64 `json:"subtotal"`
 	EsCortesia     bool    `json:"es_cortesia"`

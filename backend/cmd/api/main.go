@@ -49,7 +49,10 @@ func main() {
 	inventario.RegisterRoutes(api, db)
 	ventas.RegisterRoutes(api, db)
 	finanzas.RegisterRoutes(api, db)
-	bitacora.RegisterRoutes(api, db)
+	bitacora.RegisterRoutes(
+		api.Group("/bitacora", auth.Middleware(), auth.RequireAdmin()),
+		db,
+	)
 
 	log.Printf("🚀 Servidor corriendo en puerto %s [%s]", config.AppConfig.AppPort, config.AppConfig.AppEnv)
 	log.Fatal(app.Listen(":" + config.AppConfig.AppPort))

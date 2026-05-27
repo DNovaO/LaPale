@@ -2,6 +2,11 @@ package usuarios
 
 import "time"
 
+type Rol struct {
+	ID     string `json:"id"`
+	Nombre string `json:"nombre"`
+}
+
 type Usuario struct {
 	ID           string    `json:"id"`
 	SucursalID   string    `json:"sucursal_id"`

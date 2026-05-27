@@ -25,6 +25,10 @@ func (s *Service) GetAll(sucursalID string) ([]Usuario, error) {
 	return s.repo.FindAll(sucursalID)
 }
 
+func (s *Service) GetRoles() ([]Rol, error) {
+	return s.repo.FindRoles()
+}
+
 func (s *Service) GetByID(id string) (*Usuario, error) {
 	u, err := s.repo.FindByID(id)
 	if err != nil {

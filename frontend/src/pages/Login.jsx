@@ -86,7 +86,7 @@ export default function Login() {
       login(data)
       navigate('/dashboard', { replace: true })
     } catch (err) {
-      const msg = err.response?.data?.error || 'Error al conectar con el servidor'
+      const msg = err.response?.data?.message || 'Error al conectar con el servidor'
       setError(msg)
       const card = document.getElementById('login-card')
       card?.classList.add('shake')
@@ -139,6 +139,9 @@ export default function Login() {
         input:-webkit-autofill:focus {
           -webkit-box-shadow: 0 0 0 1000px ${isDark ? '#1a3a5c' : '#e8f1f8'} inset !important;
           -webkit-text-fill-color: ${isDark ? '#F1F6F6' : '#0C0F14'} !important;
+        }
+        @media (max-width: 400px) {
+          #login-card { margin: 0 8px !important; padding: 28px 20px !important; }
         }
       `}</style>
 

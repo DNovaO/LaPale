@@ -5,11 +5,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// RegisterRoutes espera un grupo de router que ya tenga aplicados
+// auth.Middleware() y auth.RequireAdmin() antes de llamar.
 func RegisterRoutes(router fiber.Router, db *pgxpool.Pool) {
 	service := NewService(db)
 	handler := NewHandler(service)
 
-	// El router que llega desde main.go ya tiene auth.Middleware()
-	// y auth.RequireAdmin() aplicados — ver cmd/api/main.go
-	router.Get("/bitacora", handler.GetAll)
+	router.Get("/", handler.GetAll)
 }

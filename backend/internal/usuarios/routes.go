@@ -20,6 +20,7 @@ func RegisterRoutes(router fiber.Router, db *pgxpool.Pool) {
 	)
 
 	u.Get("/", handler.GetAll)
+	u.Get("/roles", handler.GetRoles)
 	u.Get("/:id", handler.GetByID)
 	u.Post("/", handler.Create)
 	u.Put("/:id", handler.Update)

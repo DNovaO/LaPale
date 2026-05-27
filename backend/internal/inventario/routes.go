@@ -33,6 +33,10 @@ func RegisterRoutes(router fiber.Router, db *pgxpool.Pool) {
 		auth.RequirePermiso(func(p claims.Permisos) bool { return p.GestionarInventario }),
 		handler.UpdateActivo,
 	)
+	inv.Post("/productos/:id/eliminar",
+		auth.RequireAdmin(),
+		handler.Delete,
+	)
 
 	inv.Get("/movimientos", handler.GetMovimientos)
 	inv.Post("/movimientos",

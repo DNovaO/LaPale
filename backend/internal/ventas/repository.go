@@ -215,7 +215,7 @@ func (r *Repository) ConfirmarVenta(v *Venta, detalle []DetalleVenta, pago Pago,
 		}
 
 		// Bloquear fila y verificar stock
-		var stockActual int
+		var stockActual float64
 		err = tx.QueryRow(ctx,
 			`SELECT stock_actual FROM productos WHERE id=$1 FOR UPDATE`, d.ProductoID,
 		).Scan(&stockActual)
@@ -225,7 +225,7 @@ func (r *Repository) ConfirmarVenta(v *Venta, detalle []DetalleVenta, pago Pago,
 
 		nuevoStock := stockActual - d.Cantidad
 		if nuevoStock < 0 {
-			return fmt.Errorf("stock insuficiente para '%s': disponible %d, requerido %d",
+			return fmt.Errorf("stock insuficiente para '%s': disponible %.2f, requerido %.2f",
 				productos[d.ProductoID].nombre, stockActual, d.Cantidad)
 		}
 
@@ -282,10 +282,10 @@ func (r *Repository) ConfirmarVenta(v *Venta, detalle []DetalleVenta, pago Pago,
 }
 
 type productoStock struct {
-	nombre string
-	precio float64
-	stock  int
-	activo bool
+	nombre  string
+	precio  float64
+	stock   float64
+	activo  bool
 }
 
 func (r *Repository) GetProductosParaVenta(ids []string) (map[string]productoStock, error) {
@@ -330,7 +330,7 @@ func (r *Repository) CancelarVenta(id, motivo, usuarioID string) error {
 
 	type item struct {
 		productoID string
-		cantidad   int
+		cantidad   float64
 		esCortesia bool
 	}
 	var items []item
@@ -345,7 +345,7 @@ func (r *Repository) CancelarVenta(id, motivo, usuarioID string) error {
 
 	// Revertir stock de cada producto
 	for _, it := range items {
-		var stockActual int
+		var stockActual float64
 		err = tx.QueryRow(ctx,
 			`SELECT stock_actual FROM productos WHERE id=$1 FOR UPDATE`, it.productoID,
 		).Scan(&stockActual)

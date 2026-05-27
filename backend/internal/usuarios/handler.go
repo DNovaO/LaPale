@@ -2,6 +2,7 @@ package usuarios
 
 import (
 	"errors"
+	"log"
 
 	"paleteria-system/internal/auth"
 	"paleteria-system/internal/bitacora"
@@ -26,6 +27,14 @@ func (h *Handler) GetAll(c *fiber.Ctx) error {
 		return response.Error(c, 500, "error al obtener usuarios")
 	}
 	return response.Success(c, usuarios)
+}
+
+func (h *Handler) GetRoles(c *fiber.Ctx) error {
+	roles, err := h.service.GetRoles()
+	if err != nil {
+		return response.Error(c, 500, "error al obtener roles")
+	}
+	return response.Success(c, roles)
 }
 
 func (h *Handler) GetByID(c *fiber.Ctx) error {
@@ -62,7 +71,8 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 		case errors.Is(err, ErrPasswordMuyCorto):
 			return response.Error(c, 400, "la contraseña debe tener al menos 6 caracteres")
 		default:
-			return response.Error(c, 500, "error al crear usuario")
+			log.Printf("ERROR al crear usuario: %v", err)
+			return response.Error(c, 500, err.Error())
 		}
 	}
 	return response.Created(c, u)

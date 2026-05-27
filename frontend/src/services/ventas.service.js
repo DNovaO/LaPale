@@ -6,4 +6,12 @@ export const ventasService = {
     const { data } = await client.get(`/ventas${query ? '?' + query : ''}`)
     return data.data || []
   },
+  getVenta: async (id) => {
+    const { data } = await client.get(`/ventas/${id}`)
+    return data.data
+  },
+  cancelarVenta: async (id, motivo) => {
+    const { data } = await client.patch(`/ventas/${id}/cancelar`, { motivo })
+    return data.data
+  },
 }

@@ -6,7 +6,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE sucursales (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    nombre VARCHAR(100) NOT NULL,
+    nombre VARCHAR(100) NOT NULL UNIQUE,
     direccion TEXT,
     telefono VARCHAR(20),
     activa BOOLEAN NOT NULL DEFAULT TRUE,
@@ -63,6 +63,15 @@ ON productos(sucursal_id, activo);
 
 CREATE INDEX idx_productos_sku
 ON productos(sku);
+
+ALTER TABLE productos ADD COLUMN IF NOT EXISTS tipo VARCHAR(20) NOT NULL DEFAULT 'VENTA';
+
+ALTER TABLE productos ADD COLUMN IF NOT EXISTS medida VARCHAR(20) NOT NULL DEFAULT 'UNIDAD';
+ALTER TABLE productos ADD COLUMN IF NOT EXISTS presentaciones JSONB;
+
+ALTER TABLE productos ALTER COLUMN stock_actual TYPE DECIMAL(10,3);
+ALTER TABLE movimientos_inventario ALTER COLUMN cantidad TYPE DECIMAL(10,3);
+ALTER TABLE detalle_venta ALTER COLUMN cantidad TYPE DECIMAL(10,3);
 
 CREATE TABLE movimientos_inventario (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

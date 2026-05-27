@@ -1,6 +1,8 @@
 package bitacora
 
 import (
+	"log"
+
 	"paleteria-system/pkg/claims"
 	"paleteria-system/pkg/response"
 
@@ -17,6 +19,9 @@ func NewHandler(service *Service) *Handler {
 
 func (h *Handler) GetAll(c *fiber.Ctx) error {
 	uc := claims.GetClaims(c)
+	if uc == nil {
+		return response.Error(c, 401, "no autenticado")
+	}
 
 	filtros := FiltrosBitacora{
 		SucursalID: uc.SucursalID,
@@ -30,6 +35,7 @@ func (h *Handler) GetAll(c *fiber.Ctx) error {
 
 	registros, err := h.service.GetAll(filtros)
 	if err != nil {
+		log.Printf("ERROR al obtener bitácora: %v", err)
 		return response.Error(c, 500, "error al obtener bitácora")
 	}
 	return response.Success(c, registros)

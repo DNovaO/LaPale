@@ -9,6 +9,7 @@ var (
 	ErrStockInsuficiente    = errors.New("stock insuficiente")
 	ErrTipoInvalido         = errors.New("tipo de movimiento inválido")
 	ErrCantidadInvalida     = errors.New("la cantidad debe ser mayor a cero")
+	ErrTieneVentas          = errors.New("no se puede eliminar: el producto tiene ventas asociadas")
 )
 
 var tiposValidos = map[string]bool{
@@ -29,8 +30,8 @@ func NewService(repo *Repository) *Service {
 
 // ── Productos ────────────────────────────────────────────────
 
-func (s *Service) GetAll(sucursalID string, soloActivos bool) ([]Producto, error) {
-	return s.repo.FindAllProductos(sucursalID, soloActivos)
+func (s *Service) GetAll(sucursalID string, soloActivos bool, tipo string) ([]Producto, error) {
+	return s.repo.FindAllProductos(sucursalID, soloActivos, tipo)
 }
 
 func (s *Service) GetByID(id string) (*Producto, error) {
@@ -44,19 +45,44 @@ func (s *Service) GetByID(id string) (*Producto, error) {
 	return p, nil
 }
 
-func (s *Service) Create(sucursalID string, req CreateProductoRequest) (*Producto, error) {
-	if req.Nombre == "" || req.Precio <= 0 {
+func (s *Service) Create(sucursalID, usuarioID string, req CreateProductoRequest) (*Producto, error) {
+	if req.Nombre == "" {
+		return nil, ErrDatosRequeridos
+	}
+	if req.Presentaciones == "" && req.Precio <= 0 {
 		return nil, ErrDatosRequeridos
 	}
 
+	sku := req.SKU
+	if sku == "" {
+		var err error
+		sku, err = s.repo.GenerarSKU()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	tipo := req.Tipo
+	if tipo == "" {
+		tipo = "VENTA"
+	}
+
+	medida := req.Medida
+	if medida == "" {
+		medida = "UNIDAD"
+	}
+
 	p := &Producto{
-		SucursalID:  sucursalID,
-		Nombre:      req.Nombre,
-		SKU:         req.SKU,
-		Descripcion: req.Descripcion,
-		Precio:      req.Precio,
-		StockActual: req.StockInicial,
-		StockMinimo: req.StockMinimo,
+		SucursalID:     sucursalID,
+		Nombre:         req.Nombre,
+		SKU:            sku,
+		Descripcion:    req.Descripcion,
+		Precio:         req.Precio,
+		StockActual:    req.StockInicial,
+		StockMinimo:    req.StockMinimo,
+		Tipo:           tipo,
+		Medida:         medida,
+		Presentaciones: req.Presentaciones,
 	}
 
 	if err := s.repo.CreateProducto(p); err != nil {
@@ -67,7 +93,7 @@ func (s *Service) Create(sucursalID string, req CreateProductoRequest) (*Product
 	if req.StockInicial > 0 {
 		_ = s.repo.RegistrarMovimiento(&Movimiento{
 			ProductoID:    p.ID,
-			UsuarioID:     sucursalID, // se sobreescribe en el handler con el user real
+			UsuarioID:     usuarioID,
 			Tipo:          TipoEntrada,
 			Cantidad:      req.StockInicial,
 			Observaciones: "Stock inicial al crear producto",
@@ -78,7 +104,10 @@ func (s *Service) Create(sucursalID string, req CreateProductoRequest) (*Product
 }
 
 func (s *Service) Update(id string, req UpdateProductoRequest) error {
-	if req.Nombre == "" || req.Precio <= 0 {
+	if req.Nombre == "" {
+		return ErrDatosRequeridos
+	}
+	if req.Presentaciones == "" && req.Precio <= 0 {
 		return ErrDatosRequeridos
 	}
 	p, err := s.repo.FindProductoByID(id)
@@ -100,6 +129,17 @@ func (s *Service) UpdateActivo(id string, activo bool) error {
 		return ErrProductoNoEncontrado
 	}
 	return s.repo.UpdateActivo(id, activo)
+}
+
+func (s *Service) Delete(id string) error {
+	p, err := s.repo.FindProductoByID(id)
+	if err != nil {
+		return err
+	}
+	if p == nil {
+		return ErrProductoNoEncontrado
+	}
+	return s.repo.DeleteProducto(id)
 }
 
 // ── Movimientos ──────────────────────────────────────────────

@@ -175,6 +175,8 @@ export default function Dashboard() {
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
         @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
         .fade-in { animation: fadeIn .4s ease both }
+        .dash-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
+        @media (max-width: 768px) { .dash-grid-2 { grid-template-columns: 1fr !important; } }
       `}</style>
 
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
@@ -218,7 +220,7 @@ export default function Dashboard() {
         </div>
 
         {/* Segunda fila */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 28 }}>
+        <div className="dash-grid-2">
 
           {/* Últimas ventas */}
           <div className="fade-in" style={{

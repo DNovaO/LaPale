@@ -50,7 +50,6 @@ func (s *Service) GetByID(id string) (*Venta, error) {
 }
 
 func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest) (*Venta, error) {
-	// Validaciones básicas
 	if len(req.Detalle) == 0 {
 		return nil, ErrDetalleVacio
 	}
@@ -58,16 +57,6 @@ func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest
 		return nil, ErrMetodoPagoInvalido
 	}
 
-	// Cortesía requiere autorización
-	tipo := TipoNormal
-	if req.Tipo == TipoCortesia {
-		if req.AutorizadoPor == "" {
-			return nil, ErrCortesiaSinAutorizar
-		}
-		tipo = TipoCortesia
-	}
-
-	// Obtener productos de la DB
 	ids := make([]string, len(req.Detalle))
 	for i, d := range req.Detalle {
 		ids[i] = d.ProductoID
@@ -77,9 +66,9 @@ func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest
 		return nil, err
 	}
 
-	// Validar productos y calcular totales
 	var detalle []DetalleVenta
 	var subtotal float64
+	tipo := TipoNormal
 
 	for _, d := range req.Detalle {
 		if d.Cantidad <= 0 {
@@ -93,14 +82,15 @@ func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest
 			return nil, ErrProductoInactivo
 		}
 
-		esCortesia := tipo == TipoCortesia
 		precioUnitario := p.precio
-		if esCortesia {
+		if d.EsCortesia {
 			precioUnitario = 0
 		}
 
-		lineaSubtotal := precioUnitario * float64(d.Cantidad)
-		subtotal += lineaSubtotal
+		lineaSubtotal := precioUnitario * d.Cantidad
+		if !d.EsCortesia {
+			subtotal += lineaSubtotal
+		}
 
 		detalle = append(detalle, DetalleVenta{
 			ProductoID:     d.ProductoID,
@@ -108,19 +98,17 @@ func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest
 			Cantidad:       d.Cantidad,
 			PrecioUnitario: precioUnitario,
 			Subtotal:       lineaSubtotal,
-			EsCortesia:     esCortesia,
+			EsCortesia:     d.EsCortesia,
 		})
 	}
 
 	venta := &Venta{
-		SucursalID:    sucursalID,
-		VendedorID:    vendedorID,
-		AutorizadoPor: req.AutorizadoPor,
-		Tipo:          tipo,
-		Estado:        EstadoCerrada,
-		Subtotal:      subtotal,
-		Total:         subtotal,
-		Notas:         req.Notas,
+		SucursalID: sucursalID,
+		VendedorID: vendedorID,
+		Tipo:       tipo,
+		Estado:     EstadoCerrada,
+		Subtotal:   subtotal,
+		Total:      subtotal,
 	}
 
 	pago := Pago{

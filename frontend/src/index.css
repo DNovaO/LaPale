@@ -24,3 +24,33 @@ html { font-family: var(--font-sans); }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #283C6F; border-radius: 9999px; }
 ::-webkit-scrollbar-thumb:hover { background: #237AAA; }
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* ── Responsive utilities ──────────────────────────────── */
+@media (max-width: 768px) {
+  .mobile-stack {
+    flex-direction: column !important;
+  }
+  .mobile-full {
+    width: 100% !important;
+    flex: unset !important;
+  }
+  .mobile-hide {
+    display: none !important;
+  }
+  .mobile-scroll-x {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .mobile-grid-1 {
+    grid-template-columns: 1fr !important;
+  }
+}
