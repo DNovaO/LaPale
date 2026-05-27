@@ -2,14 +2,18 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { AuthProvider }  from '@/context/AuthContext'
 import ProtectedRoute    from '@/routes/ProtectedRoute'
+import MainLayout        from '@/layouts/MainLayout'
 import Login             from '@/pages/Login'
+import Dashboard         from '@/pages/Dashboard'
+import Inventario from '@/pages/Inventario'
 
-// Placeholder temporal para dashboard
-const Dashboard = () => (
-  <div className="min-h-screen bg-[#0f0f11] flex items-center justify-center">
-    <p className="text-white text-lg font-medium">Dashboard — próximamente</p>
-  </div>
-)
+function AppLayout({ children }) {
+  return (
+    <ProtectedRoute>
+      <MainLayout>{children}</MainLayout>
+    </ProtectedRoute>
+  )
+}
 
 export default function App() {
   return (
@@ -17,9 +21,8 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/dashboard" element={
-            <ProtectedRoute><Dashboard /></ProtectedRoute>
-          }/>
+          <Route path="/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
+          <Route path="/inventario" element={<AppLayout><Inventario /></AppLayout>} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </AuthProvider>

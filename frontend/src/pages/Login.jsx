@@ -4,13 +4,11 @@ import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import { authService } from '@/services/auth.service'
 
-// ── Íconos inline ────────────────────────────────────────────
 const IcSun = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="4"/>
-    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41
-             M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
   </svg>
 )
 
@@ -30,10 +28,7 @@ const IcEye = ({ open }) => open ? (
 ) : (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8
-             a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12
-             4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07
-             a3 3 0 1 1-4.24-4.24"/>
+    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
     <line x1="1" y1="1" x2="23" y2="23"/>
   </svg>
 )
@@ -62,17 +57,16 @@ const IcArrow = () => (
   </svg>
 )
 
-// ── Componente principal ─────────────────────────────────────
 export default function Login() {
-  const navigate  = useNavigate()
-  const { login } = useAuth()
+  const navigate      = useNavigate()
+  const { login }     = useAuth()
   const { theme, toggle } = useTheme()
 
-  const [form, setForm]       = useState({ username: '', password: '' })
+  const [form, setForm]         = useState({ username: '', password: '' })
   const [showPass, setShowPass] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
-  const [focused, setFocused] = useState('')
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState('')
+  const [focused, setFocused]   = useState('')
 
   const isDark = theme === 'dark'
 
@@ -85,10 +79,8 @@ export default function Login() {
     e.preventDefault()
     if (!form.username.trim()) return setError('Ingresa tu usuario')
     if (!form.password)        return setError('Ingresa tu contraseña')
-
     setLoading(true)
     setError('')
-
     try {
       const data = await authService.login(form.username.trim(), form.password)
       login(data)
@@ -96,7 +88,6 @@ export default function Login() {
     } catch (err) {
       const msg = err.response?.data?.error || 'Error al conectar con el servidor'
       setError(msg)
-      // Shake animation
       const card = document.getElementById('login-card')
       card?.classList.add('shake')
       setTimeout(() => card?.classList.remove('shake'), 500)
@@ -105,75 +96,104 @@ export default function Login() {
     }
   }
 
-  // ── Clases dinámicas ────────────────────────────────────────
-  const bg    = isDark ? 'bg-[#0f0f11]'   : 'bg-[#f0f0f4]'
-  const card  = isDark ? 'bg-[#18181c] border-[#2c2c35]' : 'bg-white border-[#e4e4ea]'
-  const label = isDark ? 'text-[#9898a8]' : 'text-[#52525f]'
-  const text  = isDark ? 'text-white'     : 'text-[#0f0f11]'
-  const sub   = isDark ? 'text-[#52525f]' : 'text-[#9898a8]'
-  const inputBg = isDark ? 'bg-[#222228]' : 'bg-[#f8f8fa]'
-  const inputBorder = (field) =>
-    focused === field
-      ? 'border-[#f97316] ring-2 ring-[#f97316]/20'
-      : error && !form[field]
-        ? 'border-[#ef4444] ring-2 ring-[#ef4444]/10'
-        : isDark ? 'border-[#2c2c35]' : 'border-[#e4e4ea]'
-  const iconColor = isDark ? 'text-[#52525f]' : 'text-[#9898a8]'
+  const inputBorderStyle = (field) => {
+    if (focused === field) return '2px solid #B6CD38'
+    if (error && !form[field]) return '2px solid #E72D8B'
+    return isDark ? '1.5px solid #237AAA' : '1.5px solid #1D547D'
+  }
+
+  const inputRing = (field) => {
+    if (focused === field) return '0 0 0 3px rgba(182,205,56,0.15)'
+    if (error && !form[field]) return '0 0 0 3px rgba(231,45,139,0.10)'
+    return 'none'
+  }
 
   return (
     <>
       <style>{`
         @keyframes shake {
-          0%,100%{ transform: translateX(0) }
-          20%    { transform: translateX(-8px) }
-          40%    { transform: translateX(8px) }
-          60%    { transform: translateX(-5px) }
-          80%    { transform: translateX(5px) }
+          0%,100%{ transform:translateX(0) }
+          20%    { transform:translateX(-8px) }
+          40%    { transform:translateX(8px) }
+          60%    { transform:translateX(-5px) }
+          80%    { transform:translateX(5px) }
         }
         @keyframes fadeUp {
-          from { opacity:0; transform:translateY(16px) }
+          from { opacity:0; transform:translateY(20px) }
           to   { opacity:1; transform:translateY(0) }
         }
-        @keyframes spin {
-          to { transform: rotate(360deg) }
+        @keyframes spinR { to { transform:rotate(360deg) } }
+        @keyframes orbPulse {
+          0%,100% { transform:translate(-50%,-50%) scale(1); opacity:.6 }
+          50%     { transform:translate(-50%,-50%) scale(1.08); opacity:1 }
         }
-        .shake   { animation: shake 0.5s ease }
-        .fade-up { animation: fadeUp 0.5s cubic-bezier(.16,1,.3,1) both }
-        .spinner { animation: spin 0.7s linear infinite }
-        .delay-1 { animation-delay: 60ms }
-        .delay-2 { animation-delay: 120ms }
-        .delay-3 { animation-delay: 180ms }
-        .delay-4 { animation-delay: 240ms }
+        .shake    { animation: shake .5s ease }
+        .fade-up  { animation: fadeUp .55s cubic-bezier(.16,1,.3,1) both }
+        .spinner  { animation: spinR .75s linear infinite }
+        .d1 { animation-delay: 50ms }
+        .d2 { animation-delay: 110ms }
+        .d3 { animation-delay: 170ms }
+        .d4 { animation-delay: 230ms }
+        .orb { animation: orbPulse 6s ease-in-out infinite }
+        input:-webkit-autofill,
+        input:-webkit-autofill:focus {
+          -webkit-box-shadow: 0 0 0 1000px ${isDark ? '#1a3a5c' : '#e8f1f8'} inset !important;
+          -webkit-text-fill-color: ${isDark ? '#F1F6F6' : '#0C0F14'} !important;
+        }
       `}</style>
 
-      {/* Fondo con gradiente sutil */}
-      <div className={`min-h-screen w-full flex items-center justify-center ${bg} relative overflow-hidden`}>
+      {/* Fondo */}
+      <div style={{
+        minHeight: '100vh',
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: isDark
+          ? 'radial-gradient(ellipse at 60% 40%, #0e1d35 0%, #0C0F14 60%)'
+          : 'radial-gradient(ellipse at 60% 40%, #dce8f0 0%, #F1F6F6 60%)',
+        position: 'relative',
+        overflow: 'hidden',
+        fontFamily: "'Inter', system-ui, sans-serif",
+      }}>
 
-        {/* Orb decorativo — solo dark */}
-        {isDark && (
-          <div
-            className="absolute pointer-events-none"
-            style={{
-              width: 600, height: 600,
-              borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(249,115,22,0.06) 0%, transparent 70%)',
-              top: '50%', left: '50%',
-              transform: 'translate(-50%, -50%)',
-            }}
-          />
+        {/* Orbs decorativos */}
+        {isDark ? (
+          <>
+            <div className="orb" style={{
+              position: 'absolute', width: 500, height: 500,
+              borderRadius: '50%', pointerEvents: 'none',
+              background: 'radial-gradient(circle, rgba(0,117,63,0.12) 0%, transparent 65%)',
+              top: '30%', left: '20%', transform: 'translate(-50%,-50%)',
+            }}/>
+            <div style={{
+              position: 'absolute', width: 400, height: 400,
+              borderRadius: '50%', pointerEvents: 'none',
+              background: 'radial-gradient(circle, rgba(35,122,170,0.10) 0%, transparent 65%)',
+              top: '70%', left: '80%', transform: 'translate(-50%,-50%)',
+            }}/>
+          </>
+        ) : (
+          <div style={{
+            position: 'absolute', width: 600, height: 600,
+            borderRadius: '50%', pointerEvents: 'none',
+            background: 'radial-gradient(circle, rgba(29,84,125,0.06) 0%, transparent 65%)',
+            top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+          }}/>
         )}
 
         {/* Toggle tema */}
         <button
           onClick={toggle}
-          className={`
-            absolute top-5 right-5 p-2.5 rounded-xl border cursor-pointer
-            transition-all duration-200 hover:scale-105 active:scale-95
-            ${isDark
-              ? 'bg-[#222228] border-[#2c2c35] text-[#9898a8] hover:text-white hover:border-[#3a3a46]'
-              : 'bg-white border-[#e4e4ea] text-[#52525f] hover:text-[#0f0f11] hover:border-[#c8c8d4]'
-            }
-          `}
+          style={{
+            position: 'absolute', top: 20, right: 20,
+            padding: '10px', borderRadius: 12, cursor: 'pointer',
+            border: isDark ? '1.5px solid #237AAA' : '1.5px solid #1D547D',
+            background: isDark ? '#0e2440' : 'white',
+            color: isDark ? '#B6CD38' : '#1D547D',
+            transition: 'all .2s',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
           aria-label="Cambiar tema"
         >
           {isDark ? <IcSun /> : <IcMoon />}
@@ -182,50 +202,68 @@ export default function Login() {
         {/* Card */}
         <div
           id="login-card"
-          className={`
-            relative w-full max-w-[400px] mx-4
-            border rounded-2xl p-8
-            ${card}
-            fade-up
-          `}
+          className="fade-up"
           style={{
+            width: '100%', maxWidth: 400,
+            margin: '0 16px',
+            borderRadius: 20,
+            padding: '36px 32px',
+            background: isDark
+              ? 'linear-gradient(145deg, #0f2236 0%, #0a1929 100%)'
+              : 'white',
+            border: isDark ? '1.5px solid #1D547D' : '1.5px solid #c8dce8',
             boxShadow: isDark
-              ? '0 24px 64px -8px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03)'
-              : '0 16px 48px -8px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.04)',
+              ? '0 32px 80px -12px rgba(0,0,0,0.7), 0 0 0 1px rgba(35,122,170,0.1)'
+              : '0 20px 60px -8px rgba(29,84,125,0.12), 0 0 0 1px rgba(29,84,125,0.06)',
           }}
         >
           {/* Header */}
-          <div className="mb-8 fade-up delay-1">
-            {/* Logo mark */}
-            <div
-              className="w-11 h-11 rounded-xl flex items-center justify-center mb-5"
-              style={{
-                background: 'linear-gradient(135deg, #f97316 0%, #ea6c0a 100%)',
-                boxShadow: '0 6px 16px -2px rgba(249,115,22,0.40)',
-              }}
-            >
-              <span className="text-white font-bold text-lg select-none">P</span>
+          <div className="fade-up d1" style={{ marginBottom: 28 }}>
+            {/* Logo */}
+            <div style={{
+              width: 46, height: 46, borderRadius: 14,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              marginBottom: 20,
+              background: 'linear-gradient(135deg, #B6CD38 0%, #00753F 100%)',
+              boxShadow: '0 6px 20px -4px rgba(0,117,63,0.45)',
+            }}>
+              <span style={{ color: 'white', fontWeight: 700, fontSize: 18, userSelect: 'none' }}>P</span>
             </div>
 
-            <h1 className={`text-[22px] font-semibold leading-tight ${text}`}>
+            <h1 style={{
+              fontSize: 22, fontWeight: 600, lineHeight: 1.2, margin: 0,
+              color: isDark ? '#F1F6F6' : '#0C0F14',
+            }}>
               Bienvenido
             </h1>
-            <p className={`text-sm mt-1 ${sub}`}>
+            <p style={{
+              fontSize: 13, marginTop: 6, marginBottom: 0,
+              color: isDark ? '#237AAA' : '#1D547D',
+            }}>
               Ingresa tus credenciales para continuar
             </p>
           </div>
 
           {/* Formulario */}
           <form onSubmit={submit} noValidate>
-            <div className="flex flex-col gap-4">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
               {/* Usuario */}
-              <div className="fade-up delay-2">
-                <label className={`block text-xs font-medium mb-1.5 ${label}`}>
+              <div className="fade-up d2">
+                <label style={{
+                  display: 'block', fontSize: 11, fontWeight: 600,
+                  marginBottom: 6, letterSpacing: '.04em', textTransform: 'uppercase',
+                  color: '#00753F',
+                }}>
                   Usuario
                 </label>
-                <div className="relative">
-                  <span className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${iconColor} pointer-events-none`}>
+                <div style={{ position: 'relative' }}>
+                  <span style={{
+                    position: 'absolute', left: 13, top: '50%',
+                    transform: 'translateY(-50%)', pointerEvents: 'none',
+                    color: focused === 'username' ? '#B6CD38' : isDark ? '#237AAA' : '#1D547D',
+                    transition: 'color .15s',
+                  }}>
                     <IcUser />
                   </span>
                   <input
@@ -237,23 +275,36 @@ export default function Login() {
                     onBlur={() => setFocused('')}
                     placeholder="tu_usuario"
                     autoComplete="username"
-                    className={`
-                      w-full pl-10 pr-4 py-2.5 rounded-xl border text-sm
-                      outline-none transition-all duration-150
-                      ${inputBg} ${text} ${inputBorder('username')}
-                      placeholder:text-[#52525f]
-                    `}
+                    style={{
+                      width: '100%', padding: '10px 14px 10px 40px',
+                      borderRadius: 12, fontSize: 14, outline: 'none',
+                      fontFamily: 'inherit',
+                      background: isDark ? 'rgba(255,255,255,0.04)' : '#f0f6f9',
+                      color: isDark ? '#F1F6F6' : '#0C0F14',
+                      border: inputBorderStyle('username'),
+                      boxShadow: inputRing('username'),
+                      transition: 'border .15s, box-shadow .15s',
+                    }}
                   />
                 </div>
               </div>
 
               {/* Contraseña */}
-              <div className="fade-up delay-3">
-                <label className={`block text-xs font-medium mb-1.5 ${label}`}>
+              <div className="fade-up d3">
+                <label style={{
+                  display: 'block', fontSize: 11, fontWeight: 600,
+                  marginBottom: 6, letterSpacing: '.04em', textTransform: 'uppercase',
+                  color: '#00753F',
+                }}>
                   Contraseña
                 </label>
-                <div className="relative">
-                  <span className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${iconColor} pointer-events-none`}>
+                <div style={{ position: 'relative' }}>
+                  <span style={{
+                    position: 'absolute', left: 13, top: '50%',
+                    transform: 'translateY(-50%)', pointerEvents: 'none',
+                    color: focused === 'password' ? '#B6CD38' : isDark ? '#237AAA' : '#1D547D',
+                    transition: 'color .15s',
+                  }}>
                     <IcLock />
                   </span>
                   <input
@@ -265,23 +316,32 @@ export default function Login() {
                     onBlur={() => setFocused('')}
                     placeholder="••••••••"
                     autoComplete="current-password"
-                    className={`
-                      w-full pl-10 pr-11 py-2.5 rounded-xl border text-sm
-                      outline-none transition-all duration-150
-                      ${inputBg} ${text} ${inputBorder('password')}
-                      placeholder:text-[#52525f]
-                    `}
+                    style={{
+                      width: '100%', padding: '10px 44px 10px 40px',
+                      borderRadius: 12, fontSize: 14, outline: 'none',
+                      fontFamily: 'inherit',
+                      background: isDark ? 'rgba(255,255,255,0.04)' : '#f0f6f9',
+                      color: isDark ? '#F1F6F6' : '#0C0F14',
+                      border: inputBorderStyle('password'),
+                      boxShadow: inputRing('password'),
+                      transition: 'border .15s, box-shadow .15s',
+                    }}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPass(s => !s)}
-                    className={`
-                      absolute right-3.5 top-1/2 -translate-y-1/2
-                      ${iconColor} hover:text-[#f97316]
-                      transition-colors duration-150 cursor-pointer
-                    `}
                     tabIndex={-1}
-                    aria-label={showPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    aria-label={showPass ? 'Ocultar' : 'Mostrar'}
+                    style={{
+                      position: 'absolute', right: 13, top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                      color: isDark ? '#237AAA' : '#1D547D',
+                      transition: 'color .15s',
+                      display: 'flex', alignItems: 'center',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.color = '#B6CD38'}
+                    onMouseLeave={e => e.currentTarget.style.color = isDark ? '#237AAA' : '#1D547D'}
                   >
                     <IcEye open={showPass} />
                   </button>
@@ -290,49 +350,58 @@ export default function Login() {
 
               {/* Error */}
               {error && (
-                <div
-                  className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl
-                             bg-[#ef4444]/10 border border-[#ef4444]/20"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#ef4444] shrink-0" />
-                  <p className="text-xs text-[#ef4444] font-medium">{error}</p>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 14px', borderRadius: 12,
+                  background: 'rgba(231,45,139,0.08)',
+                  border: '1.5px solid rgba(231,45,139,0.25)',
+                }}>
+                  <span style={{
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: '#E72D8B', flexShrink: 0,
+                  }}/>
+                  <p style={{ fontSize: 12, color: '#E72D8B', fontWeight: 500, margin: 0 }}>
+                    {error}
+                  </p>
                 </div>
               )}
 
-              {/* Botón submit */}
-              <div className="fade-up delay-4 mt-1">
+              {/* Botón */}
+              <div className="fade-up d4" style={{ marginTop: 4 }}>
                 <button
                   type="submit"
                   disabled={loading}
-                  className={`
-                    w-full py-2.5 px-4 rounded-xl text-sm font-semibold
-                    flex items-center justify-center gap-2
-                    text-white cursor-pointer
-                    transition-all duration-200
-                    disabled:opacity-60 disabled:cursor-not-allowed
-                    active:scale-[0.98]
-                  `}
                   style={{
-                    background: loading
-                      ? '#ea6c0a'
-                      : 'linear-gradient(135deg, #f97316 0%, #ea6c0a 100%)',
-                    boxShadow: loading ? 'none' : '0 6px 20px -4px rgba(249,115,22,0.45)',
+                    width: '100%', padding: '11px 16px',
+                    borderRadius: 12, fontSize: 14, fontWeight: 600,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    color: 'white', border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
+                    opacity: loading ? .7 : 1,
+                    background: 'linear-gradient(135deg, #B6CD38 0%, #00753F 100%)',
+                    boxShadow: loading ? 'none' : '0 6px 20px -4px rgba(0,117,63,0.45)',
+                    transition: 'opacity .2s, box-shadow .2s, transform .1s',
+                    fontFamily: 'inherit',
                   }}
                   onMouseEnter={e => {
-                    if (!loading) e.currentTarget.style.boxShadow = '0 8px 24px -4px rgba(249,115,22,0.55)'
+                    if (!loading) {
+                      e.currentTarget.style.boxShadow = '0 8px 28px -4px rgba(0,117,63,0.6)'
+                      e.currentTarget.style.transform = 'translateY(-1px)'
+                    }
                   }}
                   onMouseLeave={e => {
-                    if (!loading) e.currentTarget.style.boxShadow = '0 6px 20px -4px rgba(249,115,22,0.45)'
+                    if (!loading) {
+                      e.currentTarget.style.boxShadow = '0 6px 20px -4px rgba(0,117,63,0.45)'
+                      e.currentTarget.style.transform = 'translateY(0)'
+                    }
                   }}
+                  onMouseDown={e => { e.currentTarget.style.transform = 'scale(0.98)' }}
+                  onMouseUp={e => { e.currentTarget.style.transform = 'translateY(-1px)' }}
                 >
                   {loading ? (
                     <>
                       <svg className="spinner" width="16" height="16" viewBox="0 0 24 24"
                         fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83
-                                 M16.24 16.24l2.83 2.83M2 12h4M18 12h4
-                                 M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
-                          strokeLinecap="round"/>
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round"/>
                       </svg>
                       Ingresando...
                     </>
@@ -344,13 +413,21 @@ export default function Login() {
                   )}
                 </button>
               </div>
+
             </div>
           </form>
 
-          {/* Footer */}
-          <p className={`text-center text-xs mt-6 ${sub}`}>
-            Sistema de gestión — La Pale
-          </p>
+          {/* Divider + footer */}
+          <div style={{
+            marginTop: 24, paddingTop: 20,
+            borderTop: isDark ? '1px solid rgba(35,122,170,0.2)' : '1px solid rgba(29,84,125,0.1)',
+            textAlign: 'center',
+          }}>
+            <p style={{ fontSize: 12, margin: 0, color: isDark ? '#237AAA' : '#1D547D' }}>
+              Sistema de gestión —{' '}
+              <span style={{ color: '#00753F', fontWeight: 600 }}>La Pale</span>
+            </p>
+          </div>
         </div>
       </div>
     </>
