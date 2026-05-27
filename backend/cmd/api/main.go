@@ -26,6 +26,10 @@ func main() {
 		log.Fatal(err)
 	}
 
+	if err := database.RunMigrations(db); err != nil {
+		log.Fatalf("Error al ejecutar migraciones: %v", err)
+	}
+
 	app := fiber.New(fiber.Config{
 		AppName: config.AppConfig.AppName,
 	})

@@ -67,10 +67,6 @@ ALTER TABLE productos ADD COLUMN IF NOT EXISTS presentaciones JSONB;
 -- Cambiar stock a decimal (KILO, LITRO, etc.)
 ALTER TABLE productos ALTER COLUMN stock_actual TYPE DECIMAL(10,3);
 
--- Cambiar cantidades a decimal
-ALTER TABLE movimientos_inventario ALTER COLUMN cantidad TYPE DECIMAL(10,3);
-ALTER TABLE detalle_venta ALTER COLUMN cantidad TYPE DECIMAL(10,3);
-
 CREATE TABLE IF NOT EXISTS movimientos_inventario (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     producto_id UUID NOT NULL REFERENCES productos(id) ON DELETE RESTRICT,
@@ -87,6 +83,10 @@ CREATE TABLE IF NOT EXISTS movimientos_inventario (
 CREATE INDEX IF NOT EXISTS idx_movimientos_producto_fecha ON movimientos_inventario(producto_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_movimientos_tipo ON movimientos_inventario(tipo);
 CREATE INDEX IF NOT EXISTS idx_movimientos_usuario ON movimientos_inventario(usuario_id);
+
+ALTER TABLE movimientos_inventario ALTER COLUMN cantidad TYPE DECIMAL(10,3);
+ALTER TABLE movimientos_inventario ALTER COLUMN stock_antes TYPE DECIMAL(10,3);
+ALTER TABLE movimientos_inventario ALTER COLUMN stock_despues TYPE DECIMAL(10,3);
 
 -- ============================================================
 -- 4. VENTAS
@@ -123,6 +123,8 @@ CREATE TABLE IF NOT EXISTS detalle_venta (
 
 CREATE INDEX IF NOT EXISTS idx_detalle_venta_venta ON detalle_venta(venta_id);
 CREATE INDEX IF NOT EXISTS idx_detalle_venta_producto ON detalle_venta(producto_id);
+
+ALTER TABLE detalle_venta ALTER COLUMN cantidad TYPE DECIMAL(10,3);
 
 -- ============================================================
 -- 5. PAGOS

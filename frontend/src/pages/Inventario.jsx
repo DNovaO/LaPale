@@ -591,11 +591,6 @@ export default function Inventario() {
                 <option value="MILILITRO">Mililitro</option>
               </select>
             </Field>
-            {!editando && (
-              <Field label="Stock inicial" isDark={isDark}>
-                <Input isDark={isDark} type="number" min="0" placeholder="0" value={formP.stock_inicial} onChange={e => setFormP(f => ({ ...f, stock_inicial: e.target.value }))} />
-              </Field>
-            )}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {!editando && (

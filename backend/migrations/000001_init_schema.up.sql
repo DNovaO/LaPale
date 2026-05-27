@@ -4,7 +4,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- 1. MULTI-SUCURSAL
 -- ============================================================
 
-CREATE TABLE sucursales (
+CREATE TABLE IF NOT EXISTS sucursales (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nombre VARCHAR(100) NOT NULL UNIQUE,
     direccion TEXT,
@@ -18,14 +18,14 @@ CREATE TABLE sucursales (
 -- 2. USUARIOS Y ROLES
 -- ============================================================
 
-CREATE TABLE roles (
+CREATE TABLE IF NOT EXISTS roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nombre VARCHAR(50) NOT NULL UNIQUE,
     permisos JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE usuarios (
+CREATE TABLE IF NOT EXISTS usuarios (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     sucursal_id UUID NOT NULL REFERENCES sucursales(id) ON DELETE RESTRICT,
     rol_id UUID NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
@@ -37,14 +37,14 @@ CREATE TABLE usuarios (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_usuarios_sucursal_activo
+CREATE INDEX IF NOT EXISTS idx_usuarios_sucursal_activo
 ON usuarios(sucursal_id, activo);
 
 -- ============================================================
 -- 3. PRODUCTOS E INVENTARIO
 -- ============================================================
 
-CREATE TABLE productos (
+CREATE TABLE IF NOT EXISTS productos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     sucursal_id UUID NOT NULL REFERENCES sucursales(id) ON DELETE RESTRICT,
     nombre VARCHAR(150) NOT NULL,
@@ -58,10 +58,10 @@ CREATE TABLE productos (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_productos_sucursal_activo
+CREATE INDEX IF NOT EXISTS idx_productos_sucursal_activo
 ON productos(sucursal_id, activo);
 
-CREATE INDEX idx_productos_sku
+CREATE INDEX IF NOT EXISTS idx_productos_sku
 ON productos(sku);
 
 ALTER TABLE productos ADD COLUMN IF NOT EXISTS tipo VARCHAR(20) NOT NULL DEFAULT 'VENTA';
@@ -70,10 +70,8 @@ ALTER TABLE productos ADD COLUMN IF NOT EXISTS medida VARCHAR(20) NOT NULL DEFAU
 ALTER TABLE productos ADD COLUMN IF NOT EXISTS presentaciones JSONB;
 
 ALTER TABLE productos ALTER COLUMN stock_actual TYPE DECIMAL(10,3);
-ALTER TABLE movimientos_inventario ALTER COLUMN cantidad TYPE DECIMAL(10,3);
-ALTER TABLE detalle_venta ALTER COLUMN cantidad TYPE DECIMAL(10,3);
 
-CREATE TABLE movimientos_inventario (
+CREATE TABLE IF NOT EXISTS movimientos_inventario (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     producto_id UUID NOT NULL REFERENCES productos(id) ON DELETE RESTRICT,
     usuario_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
@@ -86,20 +84,24 @@ CREATE TABLE movimientos_inventario (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_movimientos_producto_fecha
+CREATE INDEX IF NOT EXISTS idx_movimientos_producto_fecha
 ON movimientos_inventario(producto_id, created_at);
 
-CREATE INDEX idx_movimientos_tipo
+CREATE INDEX IF NOT EXISTS idx_movimientos_tipo
 ON movimientos_inventario(tipo);
 
-CREATE INDEX idx_movimientos_usuario
+CREATE INDEX IF NOT EXISTS idx_movimientos_usuario
 ON movimientos_inventario(usuario_id);
+
+ALTER TABLE movimientos_inventario ALTER COLUMN cantidad TYPE DECIMAL(10,3);
+ALTER TABLE movimientos_inventario ALTER COLUMN stock_antes TYPE DECIMAL(10,3);
+ALTER TABLE movimientos_inventario ALTER COLUMN stock_despues TYPE DECIMAL(10,3);
 
 -- ============================================================
 -- 4. VENTAS
 -- ============================================================
 
-CREATE TABLE ventas (
+CREATE TABLE IF NOT EXISTS ventas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     sucursal_id UUID NOT NULL REFERENCES sucursales(id) ON DELETE RESTRICT,
     vendedor_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
@@ -114,19 +116,19 @@ CREATE TABLE ventas (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_ventas_sucursal_estado
+CREATE INDEX IF NOT EXISTS idx_ventas_sucursal_estado
 ON ventas(sucursal_id, estado);
 
-CREATE INDEX idx_ventas_sucursal_fecha
+CREATE INDEX IF NOT EXISTS idx_ventas_sucursal_fecha
 ON ventas(sucursal_id, created_at);
 
-CREATE INDEX idx_ventas_vendedor
+CREATE INDEX IF NOT EXISTS idx_ventas_vendedor
 ON ventas(vendedor_id);
 
-CREATE INDEX idx_ventas_tipo
+CREATE INDEX IF NOT EXISTS idx_ventas_tipo
 ON ventas(tipo);
 
-CREATE TABLE detalle_venta (
+CREATE TABLE IF NOT EXISTS detalle_venta (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     venta_id UUID NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
     producto_id UUID NOT NULL REFERENCES productos(id) ON DELETE RESTRICT,
@@ -136,17 +138,19 @@ CREATE TABLE detalle_venta (
     es_cortesia BOOLEAN NOT NULL DEFAULT FALSE
 );
 
-CREATE INDEX idx_detalle_venta_venta
+CREATE INDEX IF NOT EXISTS idx_detalle_venta_venta
 ON detalle_venta(venta_id);
 
-CREATE INDEX idx_detalle_venta_producto
+CREATE INDEX IF NOT EXISTS idx_detalle_venta_producto
 ON detalle_venta(producto_id);
+
+ALTER TABLE detalle_venta ALTER COLUMN cantidad TYPE DECIMAL(10,3);
 
 -- ============================================================
 -- 5. PAGOS
 -- ============================================================
 
-CREATE TABLE pagos (
+CREATE TABLE IF NOT EXISTS pagos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     venta_id UUID NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
     metodo VARCHAR(20) NOT NULL,
@@ -162,20 +166,20 @@ CREATE TABLE pagos (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_pagos_venta
+CREATE INDEX IF NOT EXISTS idx_pagos_venta
 ON pagos(venta_id);
 
-CREATE INDEX idx_pagos_estado
+CREATE INDEX IF NOT EXISTS idx_pagos_estado
 ON pagos(estado);
 
-CREATE INDEX idx_pagos_mp_payment
+CREATE INDEX IF NOT EXISTS idx_pagos_mp_payment
 ON pagos(mp_payment_id);
 
 -- ============================================================
 -- 6. GASTOS Y CIERRES
 -- ============================================================
 
-CREATE TABLE gastos (
+CREATE TABLE IF NOT EXISTS gastos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     sucursal_id UUID NOT NULL REFERENCES sucursales(id) ON DELETE RESTRICT,
     usuario_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
@@ -187,16 +191,16 @@ CREATE TABLE gastos (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_gastos_sucursal_fecha
+CREATE INDEX IF NOT EXISTS idx_gastos_sucursal_fecha
 ON gastos(sucursal_id, fecha);
 
-CREATE INDEX idx_gastos_tipo
+CREATE INDEX IF NOT EXISTS idx_gastos_tipo
 ON gastos(tipo);
 
-CREATE INDEX idx_gastos_usuario
+CREATE INDEX IF NOT EXISTS idx_gastos_usuario
 ON gastos(usuario_id);
 
-CREATE TABLE cierres_caja (
+CREATE TABLE IF NOT EXISTS cierres_caja (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     sucursal_id UUID NOT NULL REFERENCES sucursales(id) ON DELETE RESTRICT,
     usuario_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
@@ -213,17 +217,17 @@ CREATE TABLE cierres_caja (
     notas TEXT
 );
 
-CREATE INDEX idx_cierres_sucursal_fecha
+CREATE INDEX IF NOT EXISTS idx_cierres_sucursal_fecha
 ON cierres_caja(sucursal_id, fecha_cierre);
 
-CREATE INDEX idx_cierres_usuario
+CREATE INDEX IF NOT EXISTS idx_cierres_usuario
 ON cierres_caja(usuario_id);
 
 -- ============================================================
 -- 7. BITÁCORA
 -- ============================================================
 
-CREATE TABLE bitacora_actividad (
+CREATE TABLE IF NOT EXISTS bitacora_actividad (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     usuario_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
     sucursal_id UUID NOT NULL REFERENCES sucursales(id) ON DELETE RESTRICT,
@@ -238,17 +242,17 @@ CREATE TABLE bitacora_actividad (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_bitacora_sucursal_fecha
+CREATE INDEX IF NOT EXISTS idx_bitacora_sucursal_fecha
 ON bitacora_actividad(sucursal_id, created_at);
 
-CREATE INDEX idx_bitacora_usuario
+CREATE INDEX IF NOT EXISTS idx_bitacora_usuario
 ON bitacora_actividad(usuario_id);
 
-CREATE INDEX idx_bitacora_modulo
+CREATE INDEX IF NOT EXISTS idx_bitacora_modulo
 ON bitacora_actividad(modulo);
 
-CREATE INDEX idx_bitacora_accion
+CREATE INDEX IF NOT EXISTS idx_bitacora_accion
 ON bitacora_actividad(accion);
 
-CREATE INDEX idx_bitacora_entidad
+CREATE INDEX IF NOT EXISTS idx_bitacora_entidad
 ON bitacora_actividad(entidad, entidad_id);

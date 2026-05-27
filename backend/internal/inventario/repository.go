@@ -51,7 +51,7 @@ func (r *Repository) FindAllProductos(sucursalID string, soloActivos bool, tipo 
 		if err := rows.Scan(
 			&p.ID, &p.SucursalID, &p.Nombre, &p.SKU, &p.Descripcion,
 			&p.Precio, &p.StockActual, &p.StockMinimo, &p.Activo,
-			&p.Tipo, &p.Medida, &p.CreatedAt, &p.UpdatedAt,
+			&p.Tipo, &p.Medida, &p.Presentaciones, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -267,7 +267,7 @@ func (r *Repository) FindMovimientos(filtros FiltrosMovimiento) ([]Movimiento, e
 func (r *Repository) FindProductosBajoStock(sucursalID string) ([]Producto, error) {
 	query := `
 		SELECT id, sucursal_id, nombre, COALESCE(sku,''), COALESCE(descripcion,''),
-			precio, stock_actual, stock_minimo, activo, COALESCE(tipo,'VENTA'), created_at, updated_at
+			precio, stock_actual, stock_minimo, activo, COALESCE(tipo,'VENTA'), COALESCE(medida,'UNIDAD'), COALESCE(presentaciones::text,''), created_at, updated_at
 		FROM productos
 		WHERE sucursal_id=$1 AND activo=true AND stock_actual <= stock_minimo
 		ORDER BY stock_actual ASC
@@ -284,7 +284,7 @@ func (r *Repository) FindProductosBajoStock(sucursalID string) ([]Producto, erro
 		if err := rows.Scan(
 			&p.ID, &p.SucursalID, &p.Nombre, &p.SKU, &p.Descripcion,
 			&p.Precio, &p.StockActual, &p.StockMinimo, &p.Activo,
-			&p.Tipo, &p.Medida, &p.CreatedAt, &p.UpdatedAt,
+			&p.Tipo, &p.Medida, &p.Presentaciones, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
