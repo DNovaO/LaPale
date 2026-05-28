@@ -14,6 +14,7 @@ type Venta struct {
 	Total          float64        `json:"total"`
 	Notas          string         `json:"notas,omitempty"`
 	TicketNumero   int            `json:"ticket_numero"`
+	Metodo         string         `json:"metodo,omitempty"`
 	Detalle        []DetalleVenta `json:"detalle,omitempty"`
 	Pagos          []Pago         `json:"pagos,omitempty"`
 	CreatedAt      time.Time      `json:"created_at"`
@@ -29,6 +30,7 @@ type DetalleVenta struct {
 	PrecioUnitario float64 `json:"precio_unitario"`
 	Subtotal       float64 `json:"subtotal"`
 	EsCortesia     bool    `json:"es_cortesia"`
+	FactorConsumo  float64 `json:"-"` // solo para descuento de stock, no se persiste
 }
 
 type Pago struct {

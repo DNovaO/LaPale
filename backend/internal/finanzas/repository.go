@@ -101,7 +101,7 @@ func (r *Repository) GetResumenDia(sucursalID, fecha string) (*ResumenDia, error
 			COALESCE(SUM(CASE WHEN p.metodo='TARJETA'       THEN p.monto ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN p.metodo='TRANSFERENCIA' THEN p.monto ELSE 0 END), 0)
 		FROM ventas v
-		LEFT JOIN pagos p ON p.venta_id = v.id AND p.estado = 'CONFIRMADO'
+		LEFT JOIN pagos p ON p.venta_id = v.id AND p.estado IN ('CONFIRMADO','PENDIENTE')
 		WHERE v.sucursal_id=$1
 			AND v.estado='CERRADA'
 			AND v.tipo='NORMAL'
@@ -123,7 +123,7 @@ func (r *Repository) GetResumenDia(sucursalID, fecha string) (*ResumenDia, error
 		FROM ventas v
 		JOIN detalle_venta dv ON dv.venta_id = v.id
 		WHERE v.sucursal_id=$1
-			AND v.tipo='CORTESIA'
+			AND dv.es_cortesia = true
 			AND v.estado='CERRADA'
 			AND v.created_at::date=$2
 	`, sucursalID, fecha,
@@ -212,7 +212,7 @@ func (r *Repository) GetResumenPeriodo(filtros FiltrosPeriodo) (*ResumenPeriodo,
 		FROM ventas v
 		JOIN detalle_venta dv ON dv.venta_id = v.id
 		WHERE v.sucursal_id=$1
-			AND v.tipo='CORTESIA'
+			AND dv.es_cortesia = true
 			AND v.estado='CERRADA'
 			AND v.created_at::date BETWEEN $2 AND $3
 	`, filtros.SucursalID, filtros.Desde, filtros.Hasta,

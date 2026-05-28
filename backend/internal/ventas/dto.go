@@ -6,9 +6,11 @@ type CrearVentaRequest struct {
 }
 
 type DetalleRequest struct {
-	ProductoID string  `json:"producto_id"`
-	Cantidad   float64 `json:"cantidad"`
-	EsCortesia bool    `json:"es_cortesia"`
+	ProductoID     string  `json:"producto_id"`
+	Cantidad       float64 `json:"cantidad"`
+	PrecioUnitario float64 `json:"precio_unitario"`
+	FactorConsumo  float64 `json:"factor_consumo"`
+	EsCortesia     bool    `json:"es_cortesia"`
 }
 
 type PagoRequest struct {

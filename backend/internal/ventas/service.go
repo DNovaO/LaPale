@@ -68,7 +68,6 @@ func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest
 
 	var detalle []DetalleVenta
 	var subtotal float64
-	tipo := TipoNormal
 
 	for _, d := range req.Detalle {
 		if d.Cantidad <= 0 {
@@ -82,9 +81,13 @@ func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest
 			return nil, ErrProductoInactivo
 		}
 
-		precioUnitario := p.precio
-		if d.EsCortesia {
-			precioUnitario = 0
+		precioUnitario := d.PrecioUnitario
+		if precioUnitario <= 0 {
+			precioUnitario = p.precio
+		}
+		factorConsumo := d.FactorConsumo
+		if factorConsumo <= 0 {
+			factorConsumo = 1
 		}
 
 		lineaSubtotal := precioUnitario * d.Cantidad
@@ -99,7 +102,20 @@ func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest
 			PrecioUnitario: precioUnitario,
 			Subtotal:       lineaSubtotal,
 			EsCortesia:     d.EsCortesia,
+			FactorConsumo:  factorConsumo,
 		})
+	}
+
+	tipo := TipoNormal
+	esTodoCortesia := true
+	for _, d := range detalle {
+		if !d.EsCortesia {
+			esTodoCortesia = false
+			break
+		}
+	}
+	if esTodoCortesia && len(detalle) > 0 {
+		tipo = TipoCortesia
 	}
 
 	venta := &Venta{

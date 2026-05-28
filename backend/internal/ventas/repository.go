@@ -22,9 +22,10 @@ func (r *Repository) FindAll(filtros FiltrosVenta) ([]Venta, error) {
 		SELECT v.id, v.sucursal_id, v.vendedor_id, u.nombre,
 			COALESCE(v.autorizado_por::text,''), v.tipo, v.estado,
 			v.subtotal, v.total, COALESCE(v.notas,''),
-			v.ticket_numero, v.created_at, v.updated_at
+			v.ticket_numero, COALESCE(p.metodo,''), v.created_at, v.updated_at
 		FROM ventas v
 		JOIN usuarios u ON u.id = v.vendedor_id
+		LEFT JOIN pagos p ON p.venta_id = v.id
 		WHERE v.sucursal_id = $1
 	`
 	args := []any{filtros.SucursalID}
@@ -71,7 +72,7 @@ func (r *Repository) FindAll(filtros FiltrosVenta) ([]Venta, error) {
 			&v.ID, &v.SucursalID, &v.VendedorID, &v.VendedorNombre,
 			&v.AutorizadoPor, &v.Tipo, &v.Estado,
 			&v.Subtotal, &v.Total, &v.Notas,
-			&v.TicketNumero, &v.CreatedAt, &v.UpdatedAt,
+			&v.TicketNumero, &v.Metodo, &v.CreatedAt, &v.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -223,10 +224,11 @@ func (r *Repository) ConfirmarVenta(v *Venta, detalle []DetalleVenta, pago Pago,
 			return err
 		}
 
-		nuevoStock := stockActual - d.Cantidad
+		consumo := d.Cantidad * d.FactorConsumo
+		nuevoStock := stockActual - consumo
 		if nuevoStock < 0 {
 			return fmt.Errorf("stock insuficiente para '%s': disponible %.2f, requerido %.2f",
-				productos[d.ProductoID].nombre, stockActual, d.Cantidad)
+				productos[d.ProductoID].nombre, stockActual, consumo)
 		}
 
 		// Actualizar stock
@@ -247,7 +249,7 @@ func (r *Repository) ConfirmarVenta(v *Venta, detalle []DetalleVenta, pago Pago,
 			INSERT INTO movimientos_inventario
 				(producto_id, usuario_id, tipo, cantidad, stock_antes, stock_despues, referencia_id, observaciones)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-		`, d.ProductoID, v.VendedorID, tipoMov, -d.Cantidad,
+		`, d.ProductoID, v.VendedorID, tipoMov, -consumo,
 			stockActual, nuevoStock, v.ID,
 			fmt.Sprintf("Venta #%d", v.TicketNumero),
 		)
