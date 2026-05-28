@@ -43,15 +43,27 @@ const fmt = n => new Intl.NumberFormat('es-MX', { style: 'currency', currency: '
 const fmtTime = d => new Date(d).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
 const fmtFull = d => new Date(d).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
-const MODULOS = ['AUTH', 'USUARIOS', 'INVENTARIO', 'VENTAS', 'FINANZAS', 'CAJA']
 const ACCIONES = [
-  'LOGIN', 'LOGOUT',
-  'CREAR', 'ACTUALIZAR', 'ELIMINAR', 'CONSULTAR',
-  'ACTIVAR', 'DESACTIVAR', 'CAMBIAR_PASSWORD',
-  'ENTRADA_STOCK', 'SALIDA_STOCK', 'AJUSTE_STOCK',
-  'CONFIRMAR_VENTA', 'CANCELAR_VENTA', 'REGISTRAR_CORTESIA',
-  'REGISTRAR_GASTO', 'ELIMINAR_GASTO', 'CERRAR_CAJA',
+  { value: '', label: 'Todos los eventos' },
+  { value: 'LOGIN', label: 'Inicio de sesión' },
+  { value: 'CREAR', label: 'Crear' },
+  { value: 'ACTUALIZAR', label: 'Actualizar' },
+  { value: 'ELIMINAR', label: 'Eliminar' },
+  { value: 'CONFIRMAR_VENTA', label: 'Confirmar venta' },
+  { value: 'CANCELAR_VENTA', label: 'Cancelar venta' },
+  { value: 'REGISTRAR_CORTESIA', label: 'Registrar cortesía' },
+  { value: 'REGISTRAR_GASTO', label: 'Registrar gasto' },
+  { value: 'CERRAR_CAJA', label: 'Cerrar caja' },
 ]
+
+const TRADUCIR_MODULO = {
+  AUTH: 'Sesión',
+  USUARIOS: 'Usuarios',
+  INVENTARIO: 'Inventario',
+  VENTAS: 'Ventas',
+  FINANZAS: 'Finanzas',
+  CAJA: 'Caja',
+}
 
 function traducir(r) {
   const m = r.modulo; const a = r.accion
@@ -172,7 +184,6 @@ export default function Bitacora() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
 
-  const [filtroModulo, setFiltroModulo] = useState('')
   const [filtroAccion, setFiltroAccion] = useState('')
   const [filtroDesde, setFiltroDesde] = useState('')
   const [filtroHasta, setFiltroHasta] = useState('')
@@ -206,7 +217,6 @@ export default function Bitacora() {
     setLoading(true)
     try {
       const params = { limite: 200 }
-      if (filtroModulo) params.modulo = filtroModulo
       if (filtroAccion) params.accion = filtroAccion
       if (filtroDesde) params.desde = filtroDesde
       if (filtroHasta) params.hasta = filtroHasta
@@ -215,7 +225,7 @@ export default function Bitacora() {
     } finally {
       setLoading(false)
     }
-  }, [filtroModulo, filtroAccion, filtroDesde, filtroHasta])
+  }, [filtroAccion, filtroDesde, filtroHasta])
 
   useEffect(() => { fetchRegistros() }, [fetchRegistros])
 
@@ -305,7 +315,7 @@ export default function Bitacora() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <InfoField label="Evento" value={t.texto} C={C} />
           <InfoField label="Usuario" value={r.usuario_nombre} C={C} />
-          <InfoField label="Area" value={r.modulo} C={C} />
+          <InfoField label="Area" value={TRADUCIR_MODULO[r.modulo] || r.modulo} C={C} />
           <InfoField label="Accion" value={r.accion} C={C} />
           <InfoField label="Entidad" value={r.entidad || '—'} C={C} />
           <InfoField label="Fecha" value={fmtFull(r.created_at)} C={C} />
@@ -343,26 +353,13 @@ export default function Bitacora() {
 
         <div className="fade-in filter-row" style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Area</span>
-            <select value={filtroModulo} onChange={e => setFiltroModulo(e.target.value)} style={{
-              padding: '8px 12px', borderRadius: 10, fontSize: 12, outline: 'none',
-              fontFamily: 'inherit', background: C.card, color: C.text,
-              border: `1px solid ${C.border}`, cursor: 'pointer', minWidth: 140,
-            }}>
-              <option value="">Todas</option>
-              {MODULOS.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Evento</span>
             <select value={filtroAccion} onChange={e => setFiltroAccion(e.target.value)} style={{
               padding: '8px 12px', borderRadius: 10, fontSize: 12, outline: 'none',
               fontFamily: 'inherit', background: C.card, color: C.text,
-              border: `1px solid ${C.border}`, cursor: 'pointer', minWidth: 160,
+              border: `1px solid ${C.border}`, cursor: 'pointer', minWidth: 200,
             }}>
-              <option value="">Todos</option>
-              {ACCIONES.map(a => <option key={a} value={a}>{a}</option>)}
+              {ACCIONES.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
             </select>
           </div>
 

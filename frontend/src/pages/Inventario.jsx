@@ -48,6 +48,12 @@ const IcTrash = () => (
     <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
   </svg>
 )
+const IcCamera = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+    <circle cx="12" cy="13" r="4"/>
+  </svg>
+)
 
 const fmt = n => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n || 0)
 
@@ -142,8 +148,9 @@ export default function Inventario() {
   const [modalEliminar, setModalEliminar]   = useState(null) // producto a eliminar
 
   // Forms
-  const [formP, setFormP] = useState({ nombre: '', sku: '', descripcion: '', precio: '', stock_inicial: '', stock_minimo: '5', tipo: 'VENTA', medida: 'UNIDAD' })
+  const [formP, setFormP] = useState({ nombre: '', sku: '', descripcion: '', precio: '', stock_inicial: '', stock_minimo: '5', tipo: 'VENTA', medida: 'UNIDAD', imagen: '' })
   const [presentacionesList, setPresentacionesList] = useState([])
+  const [imagenPreview, setImagenPreview] = useState(null)
   const [formM, setFormM] = useState({ tipo: 'ENTRADA', cantidad: '', observaciones: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
@@ -156,6 +163,38 @@ export default function Inventario() {
     inputBg: isDark ? 'rgba(255,255,255,0.04)' : '#f0f6f9',
     hover:   isDark ? 'rgba(35,122,170,0.06)' : 'rgba(29,84,125,0.04)',
     tabActive: isDark ? 'rgba(182,205,56,0.12)' : 'rgba(0,117,63,0.08)',
+  }
+
+  const handleImagen = (file) => {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        const maxW = 300
+        if (img.width <= maxW) {
+          setFormP(f => ({ ...f, imagen: reader.result }))
+          setImagenPreview(reader.result)
+          return
+        }
+        const scale = maxW / img.width
+        const canvas = document.createElement('canvas')
+        canvas.width = maxW
+        canvas.height = Math.round(img.height * scale)
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        const resized = canvas.toDataURL('image/jpeg', 0.75)
+        setFormP(f => ({ ...f, imagen: resized }))
+        setImagenPreview(resized)
+      }
+      img.src = reader.result
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const limpiarImagen = () => {
+    setFormP(f => ({ ...f, imagen: '' }))
+    setImagenPreview(null)
   }
 
   const fetchProductos = useCallback(async () => {
@@ -184,15 +223,17 @@ export default function Inventario() {
 
   const abrirCrear = () => {
     setEditando(null)
-    setFormP({ nombre: '', sku: '', descripcion: '', precio: '', stock_inicial: '', stock_minimo: '5', tipo: 'VENTA', medida: 'UNIDAD' })
+    setFormP({ nombre: '', sku: '', descripcion: '', precio: '', stock_inicial: '', stock_minimo: '5', tipo: 'VENTA', medida: 'UNIDAD', imagen: '' })
     setPresentacionesList([])
+    setImagenPreview(null)
     setError('')
     setModalProducto(true)
   }
 
   const abrirEditar = (p) => {
     setEditando(p)
-    setFormP({ nombre: p.nombre, sku: p.sku || '', descripcion: p.descripcion || '', precio: String(p.precio), stock_inicial: '', stock_minimo: String(p.stock_minimo), tipo: p.tipo || 'VENTA', medida: p.medida || 'UNIDAD' })
+    setFormP({ nombre: p.nombre, sku: p.sku || '', descripcion: p.descripcion || '', precio: String(p.precio), stock_inicial: '', stock_minimo: String(p.stock_minimo), tipo: p.tipo || 'VENTA', medida: p.medida || 'UNIDAD', imagen: p.imagen || '' })
+    setImagenPreview(p.imagen || null)
     let pres = []
     try { if (p.presentaciones) pres = typeof p.presentaciones === 'string' ? JSON.parse(p.presentaciones) : p.presentaciones } catch {}
     setPresentacionesList(Array.isArray(pres) ? pres : [])
@@ -219,6 +260,7 @@ export default function Inventario() {
           nombre: formP.nombre, sku: formP.sku, descripcion: formP.descripcion,
           precio: Number(formP.precio), stock_minimo: Number(formP.stock_minimo),
           tipo: formP.tipo, medida: formP.medida, presentaciones: presJSON,
+          imagen: formP.imagen,
         })
       } else {
         await client.post('/inventario/productos', {
@@ -227,6 +269,7 @@ export default function Inventario() {
           stock_inicial: Number(formP.stock_inicial) || 0,
           stock_minimo: Number(formP.stock_minimo) || 5,
           tipo: formP.tipo, medida: formP.medida, presentaciones: presJSON,
+          imagen: formP.imagen,
         })
       }
       setModalProducto(false)
@@ -442,9 +485,21 @@ export default function Inventario() {
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
                   {/* Nombre */}
-                  <div style={{ justifySelf: 'start' }}>
-                    <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: C.text }}>{p.nombre}</p>
-                    {p.sku && <p style={{ margin: 0, fontSize: 11, color: C.subtext }}>SKU: {p.sku}</p>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'start' }}>
+                    {p.imagen ? (
+                      <img src={p.imagen} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
+                    ) : (
+                      <div style={{
+                        width: 32, height: 32, borderRadius: 6, flexShrink: 0,
+                        background: isDark ? 'rgba(35,122,170,0.15)' : 'rgba(29,84,125,0.08)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 14, fontWeight: 700, color: C.subtext,
+                      }}>{(p.nombre || '?')[0].toUpperCase()}</div>
+                    )}
+                    <div>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: C.text }}>{p.nombre}</p>
+                      {p.sku && <p style={{ margin: 0, fontSize: 11, color: C.subtext }}>SKU: {p.sku}</p>}
+                    </div>
                   </div>
 
                   {/* Precio */}
@@ -616,6 +671,39 @@ export default function Inventario() {
                 border: `1.5px solid ${isDark ? 'rgba(35,122,170,0.3)' : 'rgba(29,84,125,0.2)'}`,
               }}
             />
+          </Field>
+          <Field label="Imagen" isDark={isDark}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <input
+                type="file"
+                id="imagen-upload"
+                accept="image/*"
+                capture="environment"
+                hidden
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleImagen(f); e.target.value = '' }}
+              />
+              <label htmlFor="imagen-upload" style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '8px 14px', borderRadius: 10,
+                background: isDark ? 'rgba(35,122,170,0.12)' : 'rgba(29,84,125,0.08)',
+                color: isDark ? '#237AAA' : '#1D547D',
+                fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
+                border: `1px dashed ${isDark ? 'rgba(35,122,170,0.3)' : 'rgba(29,84,125,0.2)'}`,
+                whiteSpace: 'nowrap',
+              }}>
+                <IcCamera /> {imagenPreview ? 'Cambiar' : 'Tomar foto'}
+              </label>
+              {imagenPreview && (
+                <>
+                  <img src={imagenPreview} alt="preview" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover', border: `1px solid ${C.border}` }} />
+                  <button onClick={limpiarImagen} style={{
+                    padding: '4px 8px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                    background: 'rgba(231,45,139,0.10)', color: '#E72D8B',
+                    fontSize: 11, fontFamily: 'inherit',
+                  }}>Quitar</button>
+                </>
+              )}
+            </div>
           </Field>
           <Field label="Presentaciones" isDark={isDark}>
             <span style={{ fontSize: 10, color: C.subtext, marginBottom: 2 }}>Ej: si tienes 100 L de agua y vendes 500ml, el consumo es 0.5</span>

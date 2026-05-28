@@ -22,7 +22,7 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 func (r *Repository) FindAllProductos(sucursalID string, soloActivos bool, tipo string) ([]Producto, error) {
 	query := `
 		SELECT id, sucursal_id, nombre, COALESCE(sku,''), COALESCE(descripcion,''),
-			precio, stock_actual, stock_minimo, activo, COALESCE(tipo,'VENTA'), COALESCE(medida,'UNIDAD'), COALESCE(presentaciones::text,''), created_at, updated_at
+			precio, stock_actual, stock_minimo, activo, COALESCE(tipo,'VENTA'), COALESCE(medida,'UNIDAD'), COALESCE(presentaciones::text,''), COALESCE(imagen,''), created_at, updated_at
 		FROM productos
 		WHERE sucursal_id = $1
 	`
@@ -51,7 +51,7 @@ func (r *Repository) FindAllProductos(sucursalID string, soloActivos bool, tipo 
 		if err := rows.Scan(
 			&p.ID, &p.SucursalID, &p.Nombre, &p.SKU, &p.Descripcion,
 			&p.Precio, &p.StockActual, &p.StockMinimo, &p.Activo,
-			&p.Tipo, &p.Medida, &p.Presentaciones, &p.CreatedAt, &p.UpdatedAt,
+			&p.Tipo, &p.Medida, &p.Presentaciones, &p.Imagen, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -63,14 +63,14 @@ func (r *Repository) FindAllProductos(sucursalID string, soloActivos bool, tipo 
 func (r *Repository) FindProductoByID(id string) (*Producto, error) {
 	query := `
 		SELECT id, sucursal_id, nombre, COALESCE(sku,''), COALESCE(descripcion,''),
-			precio, stock_actual, stock_minimo, activo, COALESCE(tipo,'VENTA'), COALESCE(medida,'UNIDAD'), COALESCE(presentaciones::text,''), created_at, updated_at
+			precio, stock_actual, stock_minimo, activo, COALESCE(tipo,'VENTA'), COALESCE(medida,'UNIDAD'), COALESCE(presentaciones::text,''), COALESCE(imagen,''), created_at, updated_at
 		FROM productos WHERE id = $1
 	`
 	var p Producto
 	err := r.db.QueryRow(context.Background(), query, id).Scan(
 		&p.ID, &p.SucursalID, &p.Nombre, &p.SKU, &p.Descripcion,
 		&p.Precio, &p.StockActual, &p.StockMinimo, &p.Activo,
-		&p.Tipo, &p.Medida, &p.Presentaciones, &p.CreatedAt, &p.UpdatedAt,
+		&p.Tipo, &p.Medida, &p.Presentaciones, &p.Imagen, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -84,22 +84,22 @@ func (r *Repository) FindProductoByID(id string) (*Producto, error) {
 func (r *Repository) CreateProducto(p *Producto) error {
 	query := `
 		INSERT INTO productos
-			(sucursal_id, nombre, sku, descripcion, precio, stock_actual, stock_minimo, activo, tipo, medida, presentaciones)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,NULLIF($10,'')::jsonb)
+			(sucursal_id, nombre, sku, descripcion, precio, stock_actual, stock_minimo, activo, tipo, medida, presentaciones, imagen)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,NULLIF($10,'')::jsonb,NULLIF($11,''))
 		RETURNING id, created_at, updated_at
 	`
 	return r.db.QueryRow(context.Background(), query,
 		p.SucursalID, p.Nombre, p.SKU, p.Descripcion,
-		p.Precio, p.StockActual, p.StockMinimo, p.Tipo, p.Medida, p.Presentaciones,
+		p.Precio, p.StockActual, p.StockMinimo, p.Tipo, p.Medida, p.Presentaciones, p.Imagen,
 	).Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
 }
 
 func (r *Repository) UpdateProducto(id string, req UpdateProductoRequest) error {
 	_, err := r.db.Exec(context.Background(), `
 		UPDATE productos
-		SET nombre=$1, sku=$2, descripcion=$3, precio=$4, stock_minimo=$5, tipo=$6, medida=$7, presentaciones=NULLIF($8,'')::jsonb, updated_at=NOW()
-		WHERE id=$9
-	`, req.Nombre, req.SKU, req.Descripcion, req.Precio, req.StockMinimo, req.Tipo, req.Medida, req.Presentaciones, id)
+		SET nombre=$1, sku=$2, descripcion=$3, precio=$4, stock_minimo=$5, tipo=$6, medida=$7, presentaciones=NULLIF($8,'')::jsonb, imagen=NULLIF($9,''), updated_at=NOW()
+		WHERE id=$10
+	`, req.Nombre, req.SKU, req.Descripcion, req.Precio, req.StockMinimo, req.Tipo, req.Medida, req.Presentaciones, req.Imagen, id)
 	return err
 }
 
@@ -267,7 +267,7 @@ func (r *Repository) FindMovimientos(filtros FiltrosMovimiento) ([]Movimiento, e
 func (r *Repository) FindProductosBajoStock(sucursalID string) ([]Producto, error) {
 	query := `
 		SELECT id, sucursal_id, nombre, COALESCE(sku,''), COALESCE(descripcion,''),
-			precio, stock_actual, stock_minimo, activo, COALESCE(tipo,'VENTA'), COALESCE(medida,'UNIDAD'), COALESCE(presentaciones::text,''), created_at, updated_at
+			precio, stock_actual, stock_minimo, activo, COALESCE(tipo,'VENTA'), COALESCE(medida,'UNIDAD'), COALESCE(presentaciones::text,''), COALESCE(imagen,''), created_at, updated_at
 		FROM productos
 		WHERE sucursal_id=$1 AND activo=true AND stock_actual <= stock_minimo
 		ORDER BY stock_actual ASC
@@ -284,7 +284,7 @@ func (r *Repository) FindProductosBajoStock(sucursalID string) ([]Producto, erro
 		if err := rows.Scan(
 			&p.ID, &p.SucursalID, &p.Nombre, &p.SKU, &p.Descripcion,
 			&p.Precio, &p.StockActual, &p.StockMinimo, &p.Activo,
-			&p.Tipo, &p.Medida, &p.Presentaciones, &p.CreatedAt, &p.UpdatedAt,
+			&p.Tipo, &p.Medida, &p.Presentaciones, &p.Imagen, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

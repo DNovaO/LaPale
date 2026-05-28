@@ -113,8 +113,19 @@ export default function POS() {
 
   const toggleCortesiaItem = (itemIdx) => {
     setTicket(prev => {
+      const item = prev[itemIdx]
+      if (item.cantidad > 1) {
+        const before = prev.slice(0, itemIdx)
+        const after = prev.slice(itemIdx + 1)
+        return [
+          ...before,
+          { ...item, cantidad: 1, esCortesia: !item.esCortesia },
+          { ...item, cantidad: item.cantidad - 1 },
+          ...after,
+        ]
+      }
       const newTicket = [...prev]
-      newTicket[itemIdx] = { ...newTicket[itemIdx], esCortesia: !newTicket[itemIdx].esCortesia }
+      newTicket[itemIdx] = { ...item, esCortesia: !item.esCortesia }
       return newTicket
     })
   }
@@ -243,7 +254,7 @@ export default function POS() {
                 {busqueda ? 'Sin resultados para tu búsqueda' : 'No hay productos disponibles'}
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
                 {productosFiltrados.map(p => (
                   <ProductoCard
                     key={p.id}
@@ -442,40 +453,57 @@ export default function POS() {
 function ProductoCard({ producto, isDark, C, enTicket, onClick }) {
   const sinStock = producto.stock_actual <= 0
   const tienePres = parsePresentaciones(producto.presentaciones)
+  const inicial = (producto.nombre || '?')[0].toUpperCase()
   return (
     <button onClick={onClick} disabled={sinStock} style={{
-      padding: '12px 10px', borderRadius: 12, border: `1px solid`,
+      padding: 0, borderRadius: 14, border: `1px solid`,
       borderColor: enTicket > 0 ? C.lime : C.border,
       background: enTicket > 0
         ? (isDark ? 'rgba(182,205,56,0.08)' : 'rgba(0,117,63,0.05)')
         : (isDark ? 'rgba(35,122,170,0.05)' : 'rgba(29,84,125,0.02)'),
       cursor: sinStock ? 'not-allowed' : 'pointer', opacity: sinStock ? 0.45 : 1,
       textAlign: 'left', fontFamily: 'inherit', transition: 'all .15s',
-      position: 'relative', display: 'flex', flexDirection: 'column', gap: 6,
+      position: 'relative', display: 'flex', flexDirection: 'column',
+      overflow: 'hidden',
     }}
     onMouseEnter={e => { if (!sinStock) e.currentTarget.style.borderColor = C.lime }}
     onMouseLeave={e => { if (enTicket === 0) e.currentTarget.style.borderColor = C.border }}
     >
       {enTicket > 0 && (
-        <span style={{ position: 'absolute', top: 6, right: 6, background: C.lime, color: '#0C0F14', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>
+        <span style={{ position: 'absolute', top: 8, right: 8, zIndex: 1, background: C.lime, color: '#0C0F14', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>
           {enTicket}
         </span>
       )}
-      <span style={{ fontSize: 12, fontWeight: 600, color: C.text, lineHeight: 1.3 }}>{producto.nombre}</span>
-      {producto.sku && <span style={{ fontSize: 10, color: C.muted }}>{producto.sku}</span>}
-      {tienePres ? (
-        <span style={{ fontSize: 13, fontWeight: 600, color: C.subtext, display: 'flex', alignItems: 'center', gap: 4 }}>
-          <IcChevron /> {tienePres.length} tamaños
+      <div style={{
+        width: '100%', height: 110, overflow: 'hidden',
+        background: producto.imagen
+          ? 'transparent'
+          : `hsl(${producto.nombre?.charCodeAt(0) * 7 || 120}, 30%, ${isDark ? '20%' : '90%'})`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {producto.imagen ? (
+          <img src={producto.imagen} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          <span style={{ fontSize: 40, fontWeight: 800, color: isDark ? 'rgba(182,205,56,0.5)' : 'rgba(0,117,63,0.3)' }}>{inicial}</span>
+        )}
+      </div>
+      <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.text, lineHeight: 1.3 }}>{producto.nombre}</span>
+        {producto.sku && <span style={{ fontSize: 10, color: C.muted }}>{producto.sku}</span>}
+        {tienePres ? (
+          <span style={{ fontSize: 12, fontWeight: 600, color: C.subtext, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <IcChevron /> {tienePres.length} presentaciones
+          </span>
+        ) : (
+          <span style={{ fontSize: 15, fontWeight: 700, color: C.lime, marginTop: 2 }}>{fmt(producto.precio)}</span>
+        )}
+        {(producto.medida && producto.medida !== 'UNIDAD' && !tienePres) && (
+          <span style={{ fontSize: 9, color: C.subtext, fontWeight: 500 }}>por {producto.medida.toLowerCase()}</span>
+        )}
+        <span style={{ fontSize: 10, color: producto.stock_actual <= (producto.stock_minimo || 5) ? '#E72D8B' : C.muted, marginTop: 'auto' }}>
+          {sinStock ? 'Sin stock' : `Stock: ${producto.stock_actual}`}
         </span>
-      ) : (
-        <span style={{ fontSize: 14, fontWeight: 700, color: C.lime }}>{fmt(producto.precio)}</span>
-      )}
-      {(producto.medida && producto.medida !== 'UNIDAD' && !tienePres) && (
-        <span style={{ fontSize: 9, color: C.subtext, fontWeight: 500 }}>por {producto.medida.toLowerCase()}</span>
-      )}
-      <span style={{ fontSize: 10, color: producto.stock_actual <= (producto.stock_minimo || 5) ? '#E72D8B' : C.muted }}>
-        {sinStock ? 'Sin stock' : `Stock: ${producto.stock_actual}`}
-      </span>
+      </div>
     </button>
   )
 }

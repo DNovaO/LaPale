@@ -64,6 +64,9 @@ ALTER TABLE productos ADD COLUMN IF NOT EXISTS tipo VARCHAR(20) NOT NULL DEFAULT
 ALTER TABLE productos ADD COLUMN IF NOT EXISTS medida VARCHAR(20) NOT NULL DEFAULT 'UNIDAD';
 ALTER TABLE productos ADD COLUMN IF NOT EXISTS presentaciones JSONB;
 
+-- Columna imagen (base64)
+ALTER TABLE productos ADD COLUMN IF NOT EXISTS imagen TEXT;
+
 -- Cambiar stock a decimal (KILO, LITRO, etc.)
 ALTER TABLE productos ALTER COLUMN stock_actual TYPE DECIMAL(10,3);
 

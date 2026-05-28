@@ -15,6 +15,7 @@ type Producto struct {
 	Tipo           string    `json:"tipo"`
 	Medida         string    `json:"medida"`
 	Presentaciones string    `json:"presentaciones,omitempty"`
+	Imagen         string    `json:"imagen,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }

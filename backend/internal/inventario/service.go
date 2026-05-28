@@ -83,6 +83,7 @@ func (s *Service) Create(sucursalID, usuarioID string, req CreateProductoRequest
 		Tipo:           tipo,
 		Medida:         medida,
 		Presentaciones: req.Presentaciones,
+		Imagen:         req.Imagen,
 	}
 
 	if err := s.repo.CreateProducto(p); err != nil {

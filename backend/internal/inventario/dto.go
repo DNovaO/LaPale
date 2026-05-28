@@ -10,6 +10,7 @@ type CreateProductoRequest struct {
 	Tipo           string  `json:"tipo"`
 	Medida         string  `json:"medida"`
 	Presentaciones string  `json:"presentaciones"`
+	Imagen         string  `json:"imagen"`
 }
 
 type UpdateProductoRequest struct {
@@ -21,6 +22,7 @@ type UpdateProductoRequest struct {
 	Tipo           string  `json:"tipo"`
 	Medida         string  `json:"medida"`
 	Presentaciones string  `json:"presentaciones"`
+	Imagen         string  `json:"imagen"`
 }
 
 type MovimientoRequest struct {
