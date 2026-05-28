@@ -161,7 +161,9 @@ export default function POS() {
       const body = {
         detalle: ticket.map(i => ({
           producto_id: i.producto.id,
-          cantidad: i.cantidad * (i.presentacion?.factor || 1),
+          cantidad: i.cantidad,
+          precio_unitario: i.presentacion?.precio || i.producto.precio,
+          factor_consumo: i.presentacion?.factor || 1,
           es_cortesia: i.esCortesia || false,
         })),
         pago: {

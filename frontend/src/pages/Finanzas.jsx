@@ -48,7 +48,14 @@ const today = () => new Date().toISOString().split('T')[0]
 const fmtDT = d => new Date(d + 'T12:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
 const fmtFull = d => new Date(d).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
-const TIPOS_GASTO = ['RENTA', 'SERVICIOS', 'INSUMOS', 'NOMINA', 'MANTENIMIENTO', 'OTRO']
+const TIPOS_GASTO = [
+  { value: 'RENTA', label: 'Renta' },
+  { value: 'SERVICIOS', label: 'Servicios' },
+  { value: 'INSUMOS', label: 'Insumos' },
+  { value: 'NOMINA', label: 'Nómina' },
+  { value: 'MANTENIMIENTO', label: 'Mantenimiento' },
+  { value: 'OTRO', label: 'Otro' },
+]
 
 function Modal({ open, onClose, title, children, isDark }) {
   if (!open) return null
@@ -210,6 +217,21 @@ export default function Finanzas() {
         @keyframes modalIn { from{opacity:0;transform:scale(.96)} to{opacity:1;transform:scale(1)} }
         @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
         .fade-in { animation: fadeIn .4s ease both }
+        .finanzas-select {
+          -webkit-appearance: none; appearance: none;
+          background-image:
+            linear-gradient(to right, transparent 85%, ${isDark ? 'rgba(182,205,56,0.08)' : 'rgba(182,205,56,0.15)'} 85%),
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23B6CD38' stroke-width='3'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+          background-repeat: no-repeat, no-repeat;
+          background-position: center, right 10px center;
+          padding-right: 34px !important;
+          cursor: pointer;
+        }
+        .finanzas-select:hover, .finanzas-select:focus { border-color: #B6CD38 !important; }
+        .finanzas-select option {
+          background: ${isDark ? '#0a1929' : 'white'};
+          color: ${isDark ? '#F1F6F6' : '#0C0F14'};
+        }
         @media (max-width: 768px) {
           .finanzas-tabs { width: 100% !important; }
           .finanzas-tabs button { flex: 1; text-align: center; white-space: nowrap; }
@@ -291,7 +313,7 @@ export default function Finanzas() {
                   { label: 'Efectivo', value: fmt(resumenDia.total_efectivo), icon: IcCash, accent: '#00753F' },
                   { label: 'Tarjeta', value: fmt(resumenDia.total_tarjeta), icon: IcCard, accent: '#237AAA' },
                   { label: 'Transferencia', value: fmt(resumenDia.total_transferencia), icon: IcTransfer, accent: '#8A6A4A' },
-                  { label: 'Cortesías', value: resumenDia.num_cortesias, color: '#E72D8B' },
+                  { label: 'Cortesías', value: `${resumenDia.num_cortesias} · ${fmt(resumenDia.total_cortesias)}`, color: '#E72D8B' },
                   { label: 'Gastos', value: fmt(resumenDia.total_gastos), color: '#E72D8B' },
                   { label: 'Utilidad', value: fmt(resumenDia.utilidad), color: resumenDia.utilidad >= 0 ? '#B6CD38' : '#E72D8B' },
                   { label: 'Núm. ventas', value: resumenDia.num_ventas, color: '#8A6A4A' },
@@ -541,15 +563,15 @@ export default function Finanzas() {
       <Modal open={modalGasto} onClose={() => setModalGasto(false)} title="Nuevo gasto" isDark={isDark}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <Field label="Tipo">
-            <select value={formGasto.tipo} onChange={e => setFormGasto(f => ({ ...f, tipo: e.target.value }))} style={{
+            <select className="finanzas-select" value={formGasto.tipo} onChange={e => setFormGasto(f => ({ ...f, tipo: e.target.value }))} style={{
               padding: '9px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
               fontFamily: 'inherit', width: '100%',
-              background: isDark ? 'rgba(255,255,255,0.04)' : '#f0f6f9',
+              backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f0f6f9',
               color: isDark ? '#F1F6F6' : '#0C0F14',
               border: `1.5px solid ${isDark ? 'rgba(35,122,170,0.3)' : 'rgba(29,84,125,0.2)'}`,
               cursor: 'pointer',
             }}>
-              {TIPOS_GASTO.map(t => <option key={t} value={t}>{t}</option>)}
+              {TIPOS_GASTO.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </Field>
 

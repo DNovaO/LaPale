@@ -256,7 +256,7 @@ export default function Ventas() {
           ) : (
             ventasFiltradas.map((v, i) => {
               const bEstado = badgeEstilo(v.estado)
-              const metodo = v.pagos?.[0]?.metodo || '—'
+              const metodo = v.metodo || '—'
               return (
                 <div key={v.id} style={{
                   display: 'grid', gridTemplateColumns: '60px 1.5fr 1fr 100px 100px 120px 120px 80px',

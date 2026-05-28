@@ -36,6 +36,11 @@ const IcAlert = () => (
     <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
   </svg>
 )
+const IcTransfer = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+  </svg>
+)
 const IcRefresh = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="23 4 23 10 17 10"/>
@@ -210,13 +215,14 @@ export default function Dashboard() {
             Actualizar
           </button>
         </div>
-
+          
         {/* Métricas del día */}
         <div className="fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 28 }}>
-          <MetricCard label="Ventas del día"   value={fmt(resumen?.total_ventas)}   icon={IcTrend} accent="#B6CD38" isDark={isDark} loading={loading}/>
-          <MetricCard label="Efectivo"          value={fmt(resumen?.total_efectivo)} icon={IcCash}  accent="#00753F" isDark={isDark} loading={loading}/>
-          <MetricCard label="Tarjeta"           value={fmt(resumen?.total_tarjeta)}  icon={IcCard}  accent="#237AAA" isDark={isDark} loading={loading}/>
-          <MetricCard label="Cortesías"         value={resumen?.num_cortesias ?? 0}  icon={IcGift}  accent="#E72D8B" isDark={isDark} loading={loading}/>
+          <MetricCard label="Ventas del día"   value={fmt(resumen?.total_ventas)}   icon={IcTrend}     accent="#B6CD38" isDark={isDark} loading={loading}/>
+          <MetricCard label="Efectivo"          value={fmt(resumen?.total_efectivo)} icon={IcCash}      accent="#00753F" isDark={isDark} loading={loading}/>
+          <MetricCard label="Tarjeta"           value={fmt(resumen?.total_tarjeta)}  icon={IcCard}      accent="#237AAA" isDark={isDark} loading={loading}/>
+          <MetricCard label="Transferencia"     value={fmt(resumen?.total_transferencia)} icon={IcTransfer} accent="#8A6A4A" isDark={isDark} loading={loading}/>
+          <MetricCard label="Cortesías"         value={resumen?.num_cortesias ?? 0}  icon={IcGift}      accent="#E72D8B" isDark={isDark} loading={loading}/>
         </div>
 
         {/* Segunda fila */}
@@ -354,7 +360,6 @@ export default function Dashboard() {
             boxShadow: isDark ? '0 4px 20px -4px rgba(0,0,0,0.4)' : '0 4px 16px -4px rgba(29,84,125,0.08)',
           }}>
             {[
-              { label: 'Transferencias', value: fmt(resumen.total_transferencia), color: '#237AAA' },
               { label: 'Gastos del día', value: fmt(resumen.total_gastos), color: '#E72D8B' },
               { label: 'Utilidad estimada', value: fmt(resumen.utilidad), color: resumen.utilidad >= 0 ? '#B6CD38' : '#E72D8B' },
               { label: 'Núm. ventas', value: resumen.num_ventas, color: '#8A6A4A' },
