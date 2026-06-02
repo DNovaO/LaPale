@@ -63,6 +63,7 @@ const TRADUCIR_MODULO = {
   VENTAS: 'Ventas',
   FINANZAS: 'Finanzas',
   CAJA: 'Caja',
+  CORTESIAS: 'Cortesías',
 }
 
 function traducir(r) {

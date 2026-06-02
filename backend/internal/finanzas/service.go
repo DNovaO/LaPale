@@ -82,6 +82,10 @@ func (s *Service) GetResumenPeriodo(filtros FiltrosPeriodo) (*ResumenPeriodo, er
 	return s.repo.GetResumenPeriodo(filtros)
 }
 
+func (s *Service) GetResumenSemana(sucursalID string) ([]ResumenDiario, error) {
+	return s.repo.GetResumenSemana(sucursalID)
+}
+
 // ── Cierre de caja ───────────────────────────────────────────
 
 func (s *Service) CerrarCaja(sucursalID, usuarioID string, req CerrarCajaRequest) (*CierreCaja, error) {
@@ -104,6 +108,7 @@ func (s *Service) CerrarCaja(sucursalID, usuarioID string, req CerrarCajaRequest
 		TotalVentas:        resumen.TotalVentas,
 		NumVentas:          resumen.NumVentas,
 		Notas:              req.Notas,
+		Tipo:               req.Tipo,
 	}
 
 	if err := s.repo.CerrarCaja(cierre); err != nil {
@@ -117,4 +122,12 @@ func (s *Service) GetCierres(sucursalID string, limite int) ([]CierreCaja, error
 		limite = 30
 	}
 	return s.repo.FindCierres(sucursalID, limite)
+}
+
+func (s *Service) GetCierre(id string) (*CierreCaja, error) {
+	return s.repo.FindCierreByID(id)
+}
+
+func (s *Service) GuardarPDF(cierreID, pdfPath string) error {
+	return s.repo.GuardarPDF(cierreID, pdfPath)
 }

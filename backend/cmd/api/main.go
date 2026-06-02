@@ -2,10 +2,12 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"paleteria-system/internal/auth"
 	"paleteria-system/internal/bitacora"
 	"paleteria-system/internal/config"
+	"paleteria-system/internal/cortesias"
 	"paleteria-system/internal/database"
 	"paleteria-system/internal/finanzas"
 	"paleteria-system/internal/inventario"
@@ -30,6 +32,8 @@ func main() {
 		log.Fatalf("Error al ejecutar migraciones: %v", err)
 	}
 
+	os.MkdirAll("data/cierres", 0755)
+
 	app := fiber.New(fiber.Config{
 		AppName: config.AppConfig.AppName,
 	})
@@ -51,7 +55,12 @@ func main() {
 	// Rutas protegidas
 	usuarios.RegisterRoutes(api, db)
 	inventario.RegisterRoutes(api, db)
-	ventas.RegisterRoutes(api, db)
+
+	csRepo := cortesias.NewRepository(db)
+	csService := cortesias.NewService(csRepo, db)
+	cortesias.RegisterRoutes(api, db)
+	ventas.RegisterRoutes(api, db, csService)
+
 	finanzas.RegisterRoutes(api, db)
 	bitacora.RegisterRoutes(
 		api.Group("/bitacora", auth.Middleware(), auth.RequireAdmin()),

@@ -10,6 +10,7 @@ type CreateGastoRequest struct {
 
 type CerrarCajaRequest struct {
 	Notas string `json:"notas"`
+	Tipo  string `json:"tipo"`
 }
 
 type FiltrosPeriodo struct {

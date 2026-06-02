@@ -1,8 +1,12 @@
 package ventas
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"time"
+
+	"paleteria-system/internal/cortesias"
 )
 
 var (
@@ -24,11 +28,12 @@ var metodosValidos = map[string]bool{
 }
 
 type Service struct {
-	repo *Repository
+	repo      *Repository
+	cortesias *cortesias.Service
 }
 
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo *Repository, cs *cortesias.Service) *Service {
+	return &Service{repo: repo, cortesias: cs}
 }
 
 func (s *Service) GetAll(filtros FiltrosVenta) ([]Venta, error) {
@@ -49,11 +54,15 @@ func (s *Service) GetByID(id string) (*Venta, error) {
 	return v, nil
 }
 
-func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest) (*Venta, error) {
+func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest, rolNombre string) (*Venta, error) {
 	if len(req.Detalle) == 0 {
 		return nil, ErrDetalleVacio
 	}
-	if !metodosValidos[req.Pago.Metodo] {
+
+	esFinde := time.Now().Weekday() == time.Friday || time.Now().Weekday() == time.Saturday || time.Now().Weekday() == time.Sunday
+	enviarACaja := req.Abierta || (rolNombre == "vendedor" && esFinde)
+
+	if !enviarACaja && !metodosValidos[req.Pago.Metodo] {
 		return nil, ErrMetodoPagoInvalido
 	}
 
@@ -122,10 +131,33 @@ func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest
 		SucursalID: sucursalID,
 		VendedorID: vendedorID,
 		Tipo:       tipo,
-		Estado:     EstadoCerrada,
+		Estado:     EstadoAbierta,
 		Subtotal:   subtotal,
 		Total:      subtotal,
 	}
+
+	if enviarACaja {
+		ctx := context.Background()
+		tx, err := s.repo.Db.Begin(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback(ctx)
+
+		if err := s.repo.InsertVenta(ctx, tx, venta); err != nil {
+			return nil, err
+		}
+		if err := s.repo.InsertDetalleSinDescontar(ctx, tx, venta, detalle); err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		venta.Detalle = detalle
+		return venta, nil
+	}
+
+	venta.Estado = EstadoCerrada
 
 	pago := Pago{
 		Metodo:        req.Pago.Metodo,
@@ -133,9 +165,68 @@ func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest
 		MontoRecibido: req.Pago.MontoRecibido,
 	}
 
-	if err := s.repo.ConfirmarVenta(venta, detalle, pago, productos); err != nil {
+	ctx := context.Background()
+	tx, err := s.repo.Db.Begin(ctx)
+	if err != nil {
 		return nil, err
 	}
+	defer tx.Rollback(ctx)
+
+	if err := s.repo.InsertVenta(ctx, tx, venta); err != nil {
+		return nil, err
+	}
+
+	if s.cortesias != nil {
+		getStock := func(productoID string) (cortesias.ProductoStockInfo, error) {
+			ps, err := s.repo.GetProductoStock(ctx, tx, productoID)
+			if err != nil {
+				return cortesias.ProductoStockInfo{}, err
+			}
+			return cortesias.ProductoStockInfo{
+				Nombre: ps.nombre,
+				Stock:  ps.stock,
+				Activo: ps.activo,
+			}, nil
+		}
+
+		cInfo, err := s.cortesias.EvaluarCortesia(ctx, tx, sucursalID, subtotal, vendedorID, venta.ID, getStock)
+		if err != nil && !errors.Is(err, cortesias.ErrLimiteAlcanzado) && !errors.Is(err, cortesias.ErrSinStock) {
+			return nil, err
+		}
+		if err == nil && cInfo != nil {
+			ps, err := s.repo.GetProductoStock(ctx, tx, cInfo.ProductoID)
+			precioCortesia := 0.0
+			if err == nil {
+				precioCortesia = ps.precio
+			}
+			detalle = append(detalle, DetalleVenta{
+				ProductoID:     cInfo.ProductoID,
+				ProductoNombre: cInfo.ProductoNombre,
+				Cantidad:       float64(cInfo.Cantidad),
+				PrecioUnitario: precioCortesia,
+				Subtotal:       precioCortesia * float64(cInfo.Cantidad),
+				EsCortesia:     true,
+				FactorConsumo:  1,
+			})
+			venta.CortesiaAplicada = cInfo
+		}
+		}
+
+	if err := s.repo.InsertDetalleYDescontar(ctx, tx, venta, detalle); err != nil {
+		return nil, err
+	}
+
+	if err := s.repo.InsertPago(ctx, tx, pago, venta); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	venta.Detalle = detalle
+	venta.Pagos = []Pago{pago}
+
 	return venta, nil
 }
 
@@ -154,4 +245,39 @@ func (s *Service) Cancelar(id, motivo, usuarioID string) error {
 		return ErrVentaYaCerrada
 	}
 	return s.repo.CancelarVenta(id, motivo, usuarioID)
+}
+
+func (s *Service) GetTopProductos(sucursalID, fecha string, limite int) ([]TopProducto, error) {
+	if limite == 0 {
+		limite = 5
+	}
+	return s.repo.GetTopProductos(sucursalID, fecha, limite)
+}
+
+func (s *Service) GetPendientes(sucursalID string) ([]Venta, error) {
+	return s.repo.FindPendientes(sucursalID)
+}
+
+func (s *Service) Cobrar(ventaID, usuarioID string, pago Pago) (*Venta, error) {
+	v, err := s.repo.FindByID(ventaID)
+	if err != nil {
+		return nil, err
+	}
+	if v == nil {
+		return nil, ErrVentaNoEncontrada
+	}
+	if v.Estado != EstadoAbierta {
+		return nil, ErrVentaYaCerrada
+	}
+	if !metodosValidos[pago.Metodo] {
+		return nil, ErrMetodoPagoInvalido
+	}
+
+	if err := s.repo.CobrarVenta(ventaID, pago, usuarioID); err != nil {
+		return nil, err
+	}
+
+	v.Estado = EstadoCerrada
+	v.Pagos = []Pago{pago}
+	return v, nil
 }

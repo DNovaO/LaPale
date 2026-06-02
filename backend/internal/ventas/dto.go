@@ -3,6 +3,7 @@ package ventas
 type CrearVentaRequest struct {
 	Detalle []DetalleRequest `json:"detalle"`
 	Pago    PagoRequest      `json:"pago"`
+	Abierta bool             `json:"abierta"`
 }
 
 type DetalleRequest struct {

@@ -2,6 +2,10 @@ package finanzas
 
 import (
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
 
 	"paleteria-system/internal/auth"
 	"paleteria-system/internal/bitacora"
@@ -109,6 +113,15 @@ func (h *Handler) GetResumenPeriodo(c *fiber.Ctx) error {
 	return response.Success(c, resumen)
 }
 
+func (h *Handler) GetResumenSemana(c *fiber.Ctx) error {
+	claims := auth.GetClaims(c)
+	resumen, err := h.service.GetResumenSemana(claims.SucursalID)
+	if err != nil {
+		return response.Error(c, 500, "error al obtener resumen semanal")
+	}
+	return response.Success(c, resumen)
+}
+
 // ── Cierre de caja ───────────────────────────────────────────
 
 func (h *Handler) CerrarCaja(c *fiber.Ctx) error {
@@ -147,4 +160,57 @@ func (h *Handler) GetCierres(c *fiber.Ctx) error {
 		return response.Error(c, 500, "error al obtener cierres")
 	}
 	return response.Success(c, cierres)
+}
+
+func (h *Handler) GetCierre(c *fiber.Ctx) error {
+	cierre, err := h.service.GetCierre(c.Params("id"))
+	if err != nil {
+		return response.Error(c, 500, "error al obtener cierre")
+	}
+	return response.Success(c, cierre)
+}
+
+func (h *Handler) GuardarPDF(c *fiber.Ctx) error {
+	id := c.Params("id")
+	file, err := c.FormFile("pdf")
+	if err != nil {
+		return response.Error(c, 400, "archivo PDF requerido")
+	}
+
+	dir := "data/cierres"
+	filename := fmt.Sprintf("%s_%s.pdf", id[:8], time.Now().Format("20060102_150405"))
+	path := filepath.Join(dir, filename)
+
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return response.Error(c, 500, "error al crear directorio")
+	}
+
+	if err := c.SaveFile(file, path); err != nil {
+		return response.Error(c, 500, "error al guardar archivo")
+	}
+
+	if err := h.service.GuardarPDF(id, path); err != nil {
+		return response.Error(c, 500, "error al registrar PDF en base de datos")
+	}
+
+	h.bitacora.Log(bitacora.Registro{
+		UsuarioID:  auth.GetClaims(c).UserID,
+		SucursalID: auth.GetClaims(c).SucursalID,
+		Modulo:     bitacora.ModuloCaja,
+		Accion:     "GENERAR_PDF",
+		Entidad:    "cierres_caja",
+		EntidadID:  id,
+		IPAddress:  c.IP(),
+	})
+
+	return response.Success(c, fiber.Map{"message": "PDF guardado", "path": path})
+}
+
+func (h *Handler) VerPDF(c *fiber.Ctx) error {
+	cierre, err := h.service.GetCierre(c.Params("id"))
+	if err != nil || cierre.PdfPath == "" {
+		return response.Error(c, 404, "PDF no encontrado")
+	}
+
+	return c.SendFile(cierre.PdfPath, true)
 }

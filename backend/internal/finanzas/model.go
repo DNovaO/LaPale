@@ -29,8 +29,11 @@ type CierreCaja struct {
 	TotalVentas        float64   `json:"total_ventas"`
 	NumVentas          int       `json:"num_ventas"`
 	ReporteEnviado     bool      `json:"reporte_enviado"`
+	Tipo               string    `json:"tipo"`
 	FechaCierre        time.Time `json:"fecha_cierre"`
 	Notas              string    `json:"notas,omitempty"`
+	PdfPath            string    `json:"pdf_path,omitempty"`
+	PdfGenerado        bool      `json:"pdf_generado"`
 }
 
 type ResumenDia struct {
@@ -62,6 +65,13 @@ type ResumenPeriodo struct {
 	TotalGastos    float64 `json:"total_gastos"`
 	TotalCortesias float64 `json:"total_cortesias"`
 	Utilidad       float64 `json:"utilidad"`
+}
+
+type ResumenDiario struct {
+	Fecha      string  `json:"fecha"`
+	TotalVentas float64 `json:"total_ventas"`
+	NumVentas  int     `json:"num_ventas"`
+	Utilidad   float64 `json:"utilidad"`
 }
 
 // Tipos de gasto válidos

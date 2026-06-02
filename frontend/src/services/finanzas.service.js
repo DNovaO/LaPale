@@ -10,6 +10,10 @@ export const finanzasService = {
     const { data } = await client.get(`/finanzas/resumen/periodo?desde=${desde}&hasta=${hasta}`)
     return data.data
   },
+  getResumenSemana: async () => {
+    const { data } = await client.get('/finanzas/resumen/semana')
+    return data.data || []
+  },
   getGastos: async (params = {}) => {
     const query = new URLSearchParams(params).toString()
     const { data } = await client.get(`/finanzas/gastos${query ? '?' + query : ''}`)
@@ -27,8 +31,12 @@ export const finanzasService = {
     const { data } = await client.get(`/finanzas/caja/historial?limite=${limite}`)
     return data.data || []
   },
-  cerrarCaja: async (notas = '') => {
-    const { data } = await client.post('/finanzas/caja/cerrar', { notas })
+  getCierre: async (id) => {
+    const { data } = await client.get(`/finanzas/caja/${id}`)
+    return data.data
+  },
+  cerrarCaja: async (notas = '', tipo = 'COMPLETO') => {
+    const { data } = await client.post('/finanzas/caja/cerrar', { notas, tipo })
     return data.data
   },
 }

@@ -26,6 +26,7 @@ const (
 	ModuloVentas     = "VENTAS"
 	ModuloFinanzas   = "FINANZAS"
 	ModuloCaja       = "CAJA"
+	ModuloCortesias  = "CORTESIAS"
 )
 
 // Acciones del sistema

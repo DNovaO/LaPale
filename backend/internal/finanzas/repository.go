@@ -225,6 +225,41 @@ func (r *Repository) GetResumenPeriodo(filtros FiltrosPeriodo) (*ResumenPeriodo,
 	return resumen, nil
 }
 
+func (r *Repository) GetResumenSemana(sucursalID string) ([]ResumenDiario, error) {
+	rows, err := r.db.Query(context.Background(), `
+		SELECT
+			v.created_at::date::text,
+			COALESCE(SUM(v.total), 0),
+			COUNT(v.id),
+			COALESCE(SUM(v.total), 0)
+				- COALESCE((
+					SELECT SUM(g.monto) FROM gastos g
+					WHERE g.sucursal_id = $1 AND g.fecha = v.created_at::date
+				), 0)
+		FROM ventas v
+		WHERE v.sucursal_id = $1
+			AND v.estado = 'CERRADA'
+			AND v.tipo = 'NORMAL'
+			AND v.created_at >= (CURRENT_DATE - INTERVAL '6 days')
+		GROUP BY v.created_at::date
+		ORDER BY v.created_at::date ASC
+	`, sucursalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var resumen []ResumenDiario
+	for rows.Next() {
+		var rd ResumenDiario
+		if err := rows.Scan(&rd.Fecha, &rd.TotalVentas, &rd.NumVentas, &rd.Utilidad); err != nil {
+			return nil, err
+		}
+		resumen = append(resumen, rd)
+	}
+	return resumen, nil
+}
+
 // ── Cierre de caja ───────────────────────────────────────────
 
 func (r *Repository) CerrarCaja(c *CierreCaja) error {
@@ -233,13 +268,13 @@ func (r *Repository) CerrarCaja(c *CierreCaja) error {
 			sucursal_id, usuario_id,
 			total_efectivo, total_tarjeta, total_transferencia,
 			total_cortesias, num_cortesias,
-			total_gastos, total_ventas, num_ventas, notas
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+			total_gastos, total_ventas, num_ventas, notas, tipo
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 		RETURNING id, fecha_cierre
 	`, c.SucursalID, c.UsuarioID,
 		c.TotalEfectivo, c.TotalTarjeta, c.TotalTransferencia,
 		c.TotalCortesias, c.NumCortesias,
-		c.TotalGastos, c.TotalVentas, c.NumVentas, c.Notas,
+		c.TotalGastos, c.TotalVentas, c.NumVentas, c.Notas, c.Tipo,
 	).Scan(&c.ID, &c.FechaCierre)
 }
 
@@ -249,7 +284,8 @@ func (r *Repository) FindCierres(sucursalID string, limite int) ([]CierreCaja, e
 			c.total_efectivo, c.total_tarjeta, c.total_transferencia,
 			c.total_cortesias, c.num_cortesias,
 			c.total_gastos, c.total_ventas, c.num_ventas,
-			c.reporte_enviado, c.fecha_cierre, COALESCE(c.notas,'')
+			c.reporte_enviado, c.fecha_cierre, COALESCE(c.notas,''),
+			COALESCE(c.tipo,'COMPLETO'), COALESCE(c.pdf_path,''), COALESCE(c.pdf_generado, false)
 		FROM cierres_caja c
 		JOIN usuarios u ON u.id = c.usuario_id
 		WHERE c.sucursal_id=$1
@@ -270,10 +306,44 @@ func (r *Repository) FindCierres(sucursalID string, limite int) ([]CierreCaja, e
 			&c.TotalCortesias, &c.NumCortesias,
 			&c.TotalGastos, &c.TotalVentas, &c.NumVentas,
 			&c.ReporteEnviado, &c.FechaCierre, &c.Notas,
+			&c.Tipo, &c.PdfPath, &c.PdfGenerado,
 		); err != nil {
 			return nil, err
 		}
 		cierres = append(cierres, c)
 	}
 	return cierres, nil
+}
+
+func (r *Repository) FindCierreByID(id string) (*CierreCaja, error) {
+	var c CierreCaja
+	err := r.db.QueryRow(context.Background(), `
+		SELECT c.id, c.sucursal_id, c.usuario_id, u.nombre,
+			c.total_efectivo, c.total_tarjeta, c.total_transferencia,
+			c.total_cortesias, c.num_cortesias,
+			c.total_gastos, c.total_ventas, c.num_ventas,
+			c.reporte_enviado, c.fecha_cierre, COALESCE(c.notas,''),
+			COALESCE(c.tipo,'COMPLETO'), COALESCE(c.pdf_path,''), COALESCE(c.pdf_generado, false)
+		FROM cierres_caja c
+		JOIN usuarios u ON u.id = c.usuario_id
+		WHERE c.id = $1
+	`, id).Scan(
+		&c.ID, &c.SucursalID, &c.UsuarioID, &c.UsuarioNombre,
+		&c.TotalEfectivo, &c.TotalTarjeta, &c.TotalTransferencia,
+		&c.TotalCortesias, &c.NumCortesias,
+		&c.TotalGastos, &c.TotalVentas, &c.NumVentas,
+		&c.ReporteEnviado, &c.FechaCierre, &c.Notas,
+		&c.Tipo, &c.PdfPath, &c.PdfGenerado,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func (r *Repository) GuardarPDF(cierreID, pdfPath string) error {
+	_, err := r.db.Exec(context.Background(),
+		`UPDATE cierres_caja SET pdf_path=$1, pdf_generado=true WHERE id=$2`,
+		pdfPath, cierreID)
+	return err
 }

@@ -33,6 +33,7 @@ export default function POS() {
   const { theme }         = useTheme()
   const isDark            = theme === 'dark'
   const searchRef         = useRef(null)
+  const isTouch            = useRef(typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
 
   const [productos,    setProductos]    = useState([])
   const [busqueda,     setBusqueda]     = useState('')
@@ -44,6 +45,11 @@ export default function POS() {
   const [ventaExitosa, setVentaExitosa] = useState(null)
   const [error,        setError]        = useState('')
   const [presentPanel, setPresentPanel] = useState(null) // producto con presentaciones abierto
+  const [previewCortesia, setPreviewCortesia] = useState(null)
+  const [forzarEnvio, setForzarEnvio] = useState(false)
+
+  const esFinde = [5, 6, 0].includes(new Date().getDay())
+  const enviarACaja = forzarEnvio || (esFinde && user?.rol === 'vendedor')
 
   const C = {
     bg:       isDark ? '#0C0F14' : '#F1F6F6',
@@ -76,15 +82,17 @@ export default function POS() {
 
   const handleClickProducto = (producto) => {
     if (producto.stock_actual <= 0) return
+    const enTicket = ticket.filter(i => i.producto.id === producto.id).reduce((s, i) => s + i.cantidad, 0)
+    if (enTicket >= producto.stock_actual) return
     const pres = parsePresentaciones(producto.presentaciones)
     if (pres) {
       setPresentPanel({ producto, pres })
       return
     }
-    agregarAlTicket(producto, 1, null, false)
+    agregarAlTicket(producto, 1, null)
   }
 
-  const agregarAlTicket = (producto, cantidad, presentacion, esCortesia) => {
+  const agregarAlTicket = (producto, cantidad, presentacion) => {
     setTicket(prev => {
       const key = presentacion ? `${producto.id}_${presentacion.etiqueta}` : producto.id
       const existe = prev.find(i => {
@@ -97,10 +105,10 @@ export default function POS() {
           return ik === key ? { ...i, cantidad: i.cantidad + cantidad } : i
         })
       }
-      return [...prev, { producto, cantidad, presentacion: presentacion || null, esCortesia: esCortesia || false }]
+      return [...prev, { producto, cantidad, presentacion: presentacion || null }]
     })
     setPresentPanel(null)
-    searchRef.current?.focus()
+    if (!isTouch.current) searchRef.current?.focus()
   }
 
   const cambiarCantidad = (itemIdx, delta) => {
@@ -111,25 +119,6 @@ export default function POS() {
     })
   }
 
-  const toggleCortesiaItem = (itemIdx) => {
-    setTicket(prev => {
-      const item = prev[itemIdx]
-      if (item.cantidad > 1) {
-        const before = prev.slice(0, itemIdx)
-        const after = prev.slice(itemIdx + 1)
-        return [
-          ...before,
-          { ...item, cantidad: 1, esCortesia: !item.esCortesia },
-          { ...item, cantidad: item.cantidad - 1 },
-          ...after,
-        ]
-      }
-      const newTicket = [...prev]
-      newTicket[itemIdx] = { ...item, esCortesia: !item.esCortesia }
-      return newTicket
-    })
-  }
-
   const quitarItem = (itemIdx) => setTicket(prev => prev.filter((_, i) => i !== itemIdx))
 
   const limpiarTicket = () => {
@@ -137,11 +126,10 @@ export default function POS() {
     setMetodo('EFECTIVO')
     setMontoRecibido('')
     setError('')
-    searchRef.current?.focus()
+    if (!isTouch.current) searchRef.current?.focus()
   }
 
   const subtotal  = ticket.reduce((s, i) => {
-    if (i.esCortesia) return s
     const precio = i.presentacion?.precio || i.producto.precio
     return s + precio * i.cantidad
   }, 0)
@@ -151,7 +139,24 @@ export default function POS() {
     : 0
 
   const puedeConfirmar = ticket.length > 0 &&
-    (metodo !== 'EFECTIVO' || !montoRecibido || parseFloat(montoRecibido) >= total)
+    (enviarACaja || metodo !== 'EFECTIVO' || !montoRecibido || parseFloat(montoRecibido) >= total)
+
+  useEffect(() => {
+    if (subtotal <= 0) { setPreviewCortesia(null); return }
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API}/cortesias/preview?monto=${subtotal}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        const d = await res.json()
+        if (!cancelled) {
+          setPreviewCortesia(d?.data ?? null)
+        }
+      } catch { if (!cancelled) setPreviewCortesia(null) }
+    }, 300)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [subtotal, token])
 
   const confirmarVenta = async () => {
     if (!puedeConfirmar) return
@@ -164,12 +169,11 @@ export default function POS() {
           cantidad: i.cantidad,
           precio_unitario: i.presentacion?.precio || i.producto.precio,
           factor_consumo: i.presentacion?.factor || 1,
-          es_cortesia: i.esCortesia || false,
         })),
-        pago: {
-          metodo,
-          monto_recibido: metodo === 'EFECTIVO' ? parseFloat(montoRecibido || total) : 0,
-        },
+        pago: enviarACaja
+          ? { metodo: 'EFECTIVO', monto_recibido: 0 }
+          : { metodo, monto_recibido: metodo === 'EFECTIVO' ? parseFloat(montoRecibido || total) : 0 },
+        ...(enviarACaja && { abierta: true }),
       }
 
       const res  = await fetch(`${API}/ventas`, {
@@ -180,13 +184,15 @@ export default function POS() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.message ?? 'Error al confirmar venta')
 
-      setVentaExitosa({ ...data.data, cambio })
-      setProductos(prev => prev.map(p => {
-        const item = ticket.find(i => i.producto.id === p.id)
-        if (!item) return p
-        const descuento = item.cantidad * (item.presentacion?.factor || 1)
-        return { ...p, stock_actual: p.stock_actual - descuento }
-      }))
+      setVentaExitosa({ ...data.data, cambio, enviadoACaja: enviarACaja })
+      if (!enviarACaja) {
+        setProductos(prev => prev.map(p => {
+          const item = ticket.find(i => i.producto.id === p.id)
+          if (!item) return p
+          const descuento = item.cantidad * (item.presentacion?.factor || 1)
+          return { ...p, stock_actual: p.stock_actual - descuento }
+        }))
+      }
     } catch (e) {
       setError(e.message)
     } finally {
@@ -234,7 +240,7 @@ export default function POS() {
               </span>
               <input
                 ref={searchRef}
-                autoFocus
+                autoFocus={!isTouch.current}
                 value={busqueda}
                 onChange={e => setBusqueda(e.target.value)}
                 placeholder="Buscar producto o SKU..."
@@ -246,6 +252,21 @@ export default function POS() {
                 }}
               />
             </div>
+            {user?.rol === 'administrador' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                <button onClick={() => setForzarEnvio(f => !f)} style={{
+                  padding: '4px 10px', borderRadius: 6, border: `1px solid ${forzarEnvio ? '#f59e0b' : C.border}`,
+                  background: forzarEnvio ? 'rgba(245,158,11,0.12)' : 'transparent',
+                  color: forzarEnvio ? '#f59e0b' : C.subtext, fontSize: 11, cursor: 'pointer',
+                  fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4, transition: 'all .15s',
+                }}>
+                  {forzarEnvio ? 'Solo envio (ON)' : 'Solo envio (OFF)'}
+                </button>
+                <span style={{ fontSize: 10, color: C.muted }}>
+                  {forzarEnvio ? 'Ventas se envian a caja sin cobrar' : esFinde ? 'Hoy es finde — envio a caja activo' : 'Hoy es dia habil — cobro directo activo'}
+                </span>
+              </div>
+            )}
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
@@ -288,7 +309,7 @@ export default function POS() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {presentPanel.pres.map((pr, i) => (
-                    <button key={i} onClick={() => agregarAlTicket(presentPanel.producto, 1, pr, false)} style={{
+                    <button key={i} onClick={() => agregarAlTicket(presentPanel.producto, 1, pr)} style={{
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                       padding: '10px 14px', borderRadius: 10, border: `1px solid ${C.border}`,
                       background: C.inputBg, cursor: 'pointer', fontFamily: 'inherit', width: '100%',
@@ -347,7 +368,6 @@ export default function POS() {
                   <div key={idx} style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     padding: '10px 8px', borderBottom: `1px solid ${C.border}`,
-                    opacity: item.esCortesia ? 0.7 : 1,
                   }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -356,24 +376,18 @@ export default function POS() {
                       {item.presentacion && (
                         <p style={{ margin: 0, fontSize: 11, color: C.subtext }}>{item.presentacion.etiqueta}</p>
                       )}
-                      <p style={{ margin: 0, fontSize: 12, color: item.esCortesia ? C.pink : C.subtext }}>
-                        {item.esCortesia ? 'Cortesía' : fmt(precio) + ' c/u'}
-                      </p>
+                      <p style={{ margin: 0, fontSize: 12, color: C.subtext }}>{fmt(precio) + ' c/u'}</p>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                      <button onClick={() => toggleCortesiaItem(idx)} title="Cortesía" style={{
-                        width: 24, height: 24, borderRadius: 6, border: 'none', cursor: 'pointer', padding: 0,
-                        background: item.esCortesia ? 'rgba(231,45,139,0.15)' : 'transparent',
-                        color: item.esCortesia ? C.pink : C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'all .1s', fontSize: 12,
-                      }}><IcGift /></button>
                       <CantidadBtn onClick={() => cambiarCantidad(idx, -1)} C={C}><IcMinus /></CantidadBtn>
                       <span style={{ fontSize: 13, fontWeight: 600, color: C.text, minWidth: 20, textAlign: 'center' }}>{item.cantidad}</span>
-                      <CantidadBtn onClick={() => cambiarCantidad(idx, 1)} C={C}><IcPlus /></CantidadBtn>
+                      <CantidadBtn onClick={() => cambiarCantidad(idx, 1)}
+                        disabled={ticket.reduce((s, i) => i.producto.id === item.producto.id ? s + i.cantidad : s, 0) >= item.producto.stock_actual}
+                        C={C}><IcPlus /></CantidadBtn>
                       <CantidadBtn onClick={() => quitarItem(idx)} C={C} danger><IcTrash /></CantidadBtn>
                     </div>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: item.esCortesia ? C.pink : C.lime, minWidth: 60, textAlign: 'right', flexShrink: 0 }}>
-                      {item.esCortesia ? '$0.00' : fmt(precio * item.cantidad)}
+                    <span style={{ fontSize: 13, fontWeight: 600, color: C.lime, minWidth: 60, textAlign: 'right', flexShrink: 0 }}>
+                      {fmt(precio * item.cantidad)}
                     </span>
                   </div>
                 )
@@ -387,27 +401,50 @@ export default function POS() {
               <span style={{ fontSize: 22, fontWeight: 700, color: C.text }}>{fmt(total)}</span>
             </div>
 
-            <div style={{ display: 'flex', gap: 6 }}>
-              {[
-                { key: 'EFECTIVO', label: 'Efectivo', icon: <IcCash /> },
-                { key: 'TARJETA', label: 'Tarjeta', icon: <IcCard /> },
-                { key: 'TRANSFERENCIA', label: 'Transf.', icon: <IcTransfer /> },
-              ].map(m => (
-                <button key={m.key} onClick={() => { setMetodo(m.key); setMontoRecibido('') }} style={{
-                  flex: 1, padding: '8px 4px', borderRadius: 10,
-                  border: `1px solid ${metodo === m.key ? C.lime : C.border}`,
-                  background: metodo === m.key ? (isDark ? 'rgba(182,205,56,0.12)' : 'rgba(0,117,63,0.08)') : 'transparent',
-                  color: metodo === m.key ? C.lime : C.subtext,
-                  fontSize: 11, fontWeight: 500, cursor: 'pointer',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                  fontFamily: 'inherit', transition: 'all .15s',
-                }}>
-                  {m.icon}{m.label}
-                </button>
-              ))}
-            </div>
+            {previewCortesia?.aplicable && (
+              <div style={{
+                background: 'rgba(231,45,139,0.08)', borderRadius: 10, padding: '10px 14px',
+                border: '1px solid rgba(231,45,139,0.2)', display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                <span style={{ flexShrink: 0, color: C.pink }}><IcGift /></span>
+                <div style={{ lineHeight: 1.3 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: C.pink }}>Cortesía incluida: </span>
+                  <span style={{ fontSize: 12, color: C.text }}>
+                    +{previewCortesia.cortesia.cantidad} {previewCortesia.cortesia.producto_nombre}
+                  </span>
+                </div>
+              </div>
+            )}
 
-            {metodo === 'EFECTIVO' && (
+            {previewCortesia && !previewCortesia.aplicable && subtotal > 0 && (
+              <div style={{ fontSize: 11, color: C.muted, textAlign: 'center', padding: '4px 0' }}>
+                La compra no alcanza el monto minimo para cortesia
+              </div>
+            )}
+
+            {!enviarACaja && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[
+                  { key: 'EFECTIVO', label: 'Efectivo', icon: <IcCash /> },
+                  { key: 'TARJETA', label: 'Tarjeta', icon: <IcCard /> },
+                  { key: 'TRANSFERENCIA', label: 'Transf.', icon: <IcTransfer /> },
+                ].map(m => (
+                  <button key={m.key} onClick={() => { setMetodo(m.key); setMontoRecibido('') }} style={{
+                    flex: 1, padding: '8px 4px', borderRadius: 10,
+                    border: `1px solid ${metodo === m.key ? C.lime : C.border}`,
+                    background: metodo === m.key ? (isDark ? 'rgba(182,205,56,0.12)' : 'rgba(0,117,63,0.08)') : 'transparent',
+                    color: metodo === m.key ? C.lime : C.subtext,
+                    fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                    fontFamily: 'inherit', transition: 'all .15s',
+                  }}>
+                    {m.icon}{m.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {!enviarACaja && metodo === 'EFECTIVO' && (
               <div>
                 <input type="number" value={montoRecibido} onChange={e => setMontoRecibido(e.target.value)}
                   placeholder={`Monto recibido (min. ${fmt(total)})`}
@@ -443,7 +480,7 @@ export default function POS() {
                 fontFamily: 'inherit', transition: 'all .2s',
                 boxShadow: puedeConfirmar && !loading ? '0 4px 16px -4px rgba(0,117,63,0.4)' : 'none',
               }}>
-              {loading ? 'Procesando...' : `Cobrar ${fmt(total)}`}
+              {loading ? 'Procesando...' : enviarACaja ? `Enviar a caja ${fmt(total)}` : `Cobrar ${fmt(total)}`}
             </button>
           </div>
         </div>
@@ -532,7 +569,7 @@ function TicketModal({ venta, C, onNuevaVenta }) {
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100vh - 112px)' }}>
       <div style={{
         background: C.surface, borderRadius: 20, border: `1px solid ${C.border}`,
-        padding: '40px 36px', maxWidth: 400, width: '100%',
+        padding: '40px 36px', maxWidth: 440, width: '100%',
         textAlign: 'center', fontFamily: "'Inter', sans-serif",
       }}>
         <div style={{ width: 64, height: 64, borderRadius: '50%', margin: '0 auto 20px',
@@ -541,13 +578,43 @@ function TicketModal({ venta, C, onNuevaVenta }) {
           boxShadow: '0 8px 24px -4px rgba(0,117,63,0.4)' }}>
           <IcCheck />
         </div>
-        <h2 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700, color: C.text }}>¡Venta confirmada!</h2>
-        <p style={{ margin: '0 0 24px', fontSize: 13, color: C.subtext }}>Ticket #{venta.ticket_numero}</p>
+        <h2 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700, color: C.text }}>
+          {venta.enviadoACaja ? 'Cuenta enviada' : 'Venta confirmada'}
+        </h2>
+        <p style={{ margin: '0 0 20px', fontSize: 13, color: C.subtext }}>
+          Ticket #{venta.ticket_numero}
+          {venta.enviadoACaja && ' — Pendiente de cobro en caja'}
+        </p>
+
+        {venta.cortesia_aplicada && (
+          <div style={{
+            background: 'rgba(231,45,139,0.08)', borderRadius: 12, padding: '12px 16px',
+            marginBottom: 16, border: `1px solid rgba(231,45,139,0.2)`,
+            display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left',
+          }}>
+            <span style={{ flexShrink: 0 }}><IcGift /></span>
+            <div>
+              <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: C.pink }}>Cortesía aplicada</p>
+              <p style={{ margin: '2px 0 0', fontSize: 13, color: C.text }}>
+                +{venta.cortesia_aplicada.cantidad} {venta.cortesia_aplicada.producto_nombre}
+              </p>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: C.subtext }}>
+                Regla: {venta.cortesia_aplicada.regla_nombre}
+              </p>
+            </div>
+          </div>
+        )}
+
         <div style={{ background: C.surface2, borderRadius: 12, padding: '16px 20px', marginBottom: 20, textAlign: 'left' }}>
           {venta.detalle?.map(d => (
-            <div key={d.producto_id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: C.text, padding: '4px 0', borderBottom: `1px solid ${C.border}` }}>
+            <div key={d.id || d.producto_id} style={{
+              display: 'flex', justifyContent: 'space-between', fontSize: 13,
+              color: d.es_cortesia ? C.pink : C.text,
+              padding: '4px 0', borderBottom: `1px solid ${C.border}`,
+              opacity: d.es_cortesia ? 0.8 : 1,
+            }}>
               <span>{d.producto_nombre} × {d.cantidad}{d.es_cortesia ? ' 🎁' : ''}</span>
-              <span style={{ fontWeight: 600 }}>{fmt(d.subtotal)}</span>
+              <span style={{ fontWeight: 600 }}>{d.es_cortesia ? 'Gratis' : fmt(d.subtotal)}</span>
             </div>
           ))}
           <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, marginTop: 4 }}>

@@ -32,10 +32,17 @@ func RegisterRoutes(router fiber.Router, db *pgxpool.Pool) {
 		auth.RequirePermiso(func(p claims.Permisos) bool { return p.VerReportes }),
 		handler.GetResumenPeriodo,
 	)
+	f.Get("/resumen/semana",
+		auth.RequirePermiso(func(p claims.Permisos) bool { return p.VerReportes }),
+		handler.GetResumenSemana,
+	)
 
 	f.Post("/caja/cerrar",
 		auth.RequirePermiso(func(p claims.Permisos) bool { return p.CerrarCaja }),
 		handler.CerrarCaja,
 	)
 	f.Get("/caja/historial", auth.RequireAdmin(), handler.GetCierres)
+	f.Get("/caja/:id", auth.RequireAdmin(), handler.GetCierre)
+	f.Post("/caja/:id/pdf", auth.RequireAdmin(), handler.GuardarPDF)
+	f.Get("/caja/:id/pdf/view", auth.RequireAdmin(), handler.VerPDF)
 }

@@ -11,6 +11,8 @@ services:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: secret
       POSTGRES_DB: paleteria_db
+      TZ: America/Mexico_City
+      PGTZ: America/Mexico_City
 
     ports:
       - "5432:5432"

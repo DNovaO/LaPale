@@ -1,6 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTheme } from '@/context/ThemeContext'
 import { finanzasService } from '@/services/finanzas.service'
+import { inventarioService } from '@/services/inventario.service'
+import client from '@/api/client'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 const IcPlus = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -40,6 +44,14 @@ const IcTransfer = () => (
 const IcRefresh = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+  </svg>
+)
+const IcPDF = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="9" y1="13" x2="15" y2="13"/>
+    <line x1="9" y1="17" x2="15" y2="17"/>
   </svg>
 )
 
@@ -127,6 +139,7 @@ export default function Finanzas() {
 
   const [modalCerrarCaja, setModalCerrarCaja] = useState(false)
   const [notasCierre, setNotasCierre] = useState('')
+  const [tipoCierre, setTipoCierre] = useState('COMPLETO')
   const [cerrando, setCerrando] = useState(false)
 
   const C = {
@@ -194,14 +207,198 @@ export default function Finanzas() {
   const handleCerrarCaja = async () => {
     setCerrando(true); setError('')
     try {
-      await finanzasService.cerrarCaja(notasCierre)
+      const cierre = await finanzasService.cerrarCaja(notasCierre, tipoCierre)
       setModalCerrarCaja(false)
       setNotasCierre('')
+      setTipoCierre('COMPLETO')
+
+      const [gastos, productos] = await Promise.all([
+        finanzasService.getGastos({ desde: today(), hasta: today() }).catch(() => []),
+        inventarioService.getProductos(false).catch(() => []),
+      ])
+      const blob = generarPDF(cierre, gastos, productos || [])
+
+      const formData = new FormData()
+      formData.append('pdf', blob, 'cierre.pdf')
+      const token = localStorage.getItem('token')
+      await fetch('/api/finanzas/caja/' + cierre.id + '/pdf', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      }).catch(() => {})
+
+      fetchData()
     } catch (e) {
       setError(e.response?.data?.message || 'Error al cerrar caja')
     } finally {
       setCerrando(false)
     }
+  }
+
+  const generarPDF = (cierre, gastos, productos) => {
+    const doc = new jsPDF()
+    const hoje = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    const hour = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+
+    const DARK  = [51, 51, 51]; const GRAY = [100, 100, 100]
+    const LINE  = [220, 220, 220]; const LIGHT = [248, 248, 248]
+    const TH = 8.5; const TD = 8; const SM = 7.5
+    const ML = 14; const MR = 14; const MW = 182
+    const CP = 2.5
+
+    // --- Header compacto ---
+    doc.setFontSize(13)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...DARK)
+    doc.text('LA PALE', ML, 14)
+    doc.setFontSize(18)
+    doc.text('Cierre de Caja', ML, 23)
+
+    doc.setDrawColor(60, 60, 60); doc.setLineWidth(0.7)
+    doc.line(ML, 27, ML + MW, 27)
+
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    let my = 34
+    doc.setTextColor(...DARK); doc.setFont('helvetica', 'bold')
+    doc.text(`Fecha: ${fmtFull(cierre.fecha_cierre)}`, ML, my)
+    doc.text(`Tipo: ${cierre.tipo === 'PARCIAL' ? 'Corte parcial' : 'Corte completo'}`, ML + 60, my)
+    my += 6
+    doc.text(`Responsable: ${cierre.usuario_nombre}`, ML, my)
+    doc.text(`Generado: ${hoje}  ${hour}`, ML + 60, my)
+    if (cierre.notas) { my += 6; doc.text(`Notas: ${cierre.notas}`, ML, my) }
+
+    let y = my + 8
+    doc.setDrawColor(...LINE); doc.setLineWidth(0.15)
+    doc.line(ML, y, ML + MW, y)
+    y += 7
+
+    // --- Resumen + Utilidad combinados ---
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...DARK)
+    doc.text('Resumen del dia', ML, y)
+    y += 1
+
+    const utilidad = cierre.total_ventas - cierre.total_gastos
+    autoTable(doc, {
+      startY: y,
+      head: [['Concepto', 'Importe']],
+      body: [
+        ['Total de ventas  (' + cierre.num_ventas + ' trans.)', fmt(cierre.total_ventas)],
+        ['Efectivo', fmt(cierre.total_efectivo)],
+        ['Tarjeta', fmt(cierre.total_tarjeta)],
+        ['Transferencia', fmt(cierre.total_transferencia)],
+        ['Cortesias otorgadas  (' + cierre.num_cortesias + ' und.)', fmt(cierre.total_cortesias)],
+        ['Gastos del dia', fmt(cierre.total_gastos)],
+        ['Utilidad neta', fmt(utilidad)],
+      ],
+      styles: { fontSize: TD, cellPadding: CP, textColor: DARK, lineColor: LINE, lineWidth: 0.1 },
+      headStyles: { fillColor: [55, 55, 55], textColor: 255, fontStyle: 'bold', fontSize: TH },
+      columnStyles: { 0: { cellWidth: 100 }, 1: { halign: 'right', cellWidth: 70 } },
+      alternateRowStyles: { fillColor: LIGHT },
+      margin: { left: ML, right: MR },
+    })
+    y = doc.lastAutoTable.finalY + 8
+
+    // --- Gastos ---
+    if (gastos.length > 0) {
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...DARK)
+      doc.text('Gastos', ML, y)
+      y += 1
+
+      autoTable(doc, {
+        startY: y,
+        head: [['Descripcion', 'Tipo', 'Monto']],
+        body: gastos.map(g => [g.descripcion || g.tipo, g.tipo, fmt(g.monto)]),
+        foot: [['', 'Total', fmt(cierre.total_gastos)]],
+        styles: { fontSize: SM, cellPadding: CP, textColor: DARK, lineColor: LINE, lineWidth: 0.1 },
+        headStyles: { fillColor: [55, 55, 55], textColor: 255, fontStyle: 'bold', fontSize: TH },
+        columnStyles: { 0: { cellWidth: 80 }, 1: { cellWidth: 40 }, 2: { halign: 'right', cellWidth: 50 } },
+        footStyles: { fontStyle: 'bold', fillColor: LIGHT },
+        alternateRowStyles: { fillColor: LIGHT },
+        margin: { left: ML, right: MR },
+      })
+      y = doc.lastAutoTable.finalY + 8
+    }
+
+    // --- Inventario en 2 columnas ---
+    if (productos.length > 0) {
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...DARK)
+      doc.text(`Inventario final  (${productos.length} productos)`, ML, y)
+      y += 1
+
+      const half = Math.ceil(productos.length / 2)
+      const left = productos.slice(0, half)
+      const right = productos.slice(half)
+
+      const buildInv = (prods) => prods.map(p => [
+        p.nombre.length > 22 ? p.nombre.slice(0, 20) + '..' : p.nombre,
+        String(p.stock_actual),
+        fmt(p.stock_actual * p.precio),
+      ])
+
+      const totalInv = productos.reduce((s, p) => s + p.stock_actual * p.precio, 0)
+
+      autoTable(doc, {
+        startY: y,
+        head: [['Producto', 'Stock', 'Valor']],
+        body: buildInv(left),
+        styles: { fontSize: 7, cellPadding: 2, textColor: DARK, lineColor: LINE, lineWidth: 0.1 },
+        headStyles: { fillColor: [55, 55, 55], textColor: 255, fontStyle: 'bold', fontSize: 7 },
+        columnStyles: { 0: { cellWidth: 46 }, 1: { halign: 'center', cellWidth: 14 }, 2: { halign: 'right', cellWidth: 24 } },
+        alternateRowStyles: { fillColor: LIGHT },
+        margin: { left: ML, right: MR / 2 + 86 },
+        tableWidth: 84,
+      })
+
+      const rightStart = y
+      autoTable(doc, {
+        startY: rightStart,
+        head: [['Producto', 'Stock', 'Valor']],
+        body: buildInv(right),
+        styles: { fontSize: 7, cellPadding: 2, textColor: DARK, lineColor: LINE, lineWidth: 0.1 },
+        headStyles: { fillColor: [55, 55, 55], textColor: 255, fontStyle: 'bold', fontSize: 7 },
+        columnStyles: { 0: { cellWidth: 46 }, 1: { halign: 'center', cellWidth: 14 }, 2: { halign: 'right', cellWidth: 24 } },
+        margin: { left: ML + 94, right: MR },
+        tableWidth: 84,
+      })
+
+      y = Math.max(doc.lastAutoTable.finalY, rightStart + (half * 8)) + 3
+
+      doc.setFontSize(7)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...DARK)
+      const footY = y + 1
+      doc.setFillColor(...LIGHT)
+      doc.rect(ML, footY - 3, MW, 6.5, 'F')
+      doc.text(`Valor total del inventario:  ${fmt(totalInv)}`, ML + MW / 2, footY + 1.5, { align: 'center' })
+      y = footY + 5
+    }
+
+    // --- Footer ---
+    const pages = doc.getNumberOfPages()
+    for (let i = 1; i <= pages; i++) {
+      doc.setPage(i)
+      doc.setDrawColor(...LINE); doc.setLineWidth(0.15)
+      doc.line(ML, doc.internal.pageSize.height - 12, ML + MW, doc.internal.pageSize.height - 12)
+      doc.setFontSize(7); doc.setTextColor(...GRAY); doc.setFont('helvetica', 'normal')
+      doc.text(`La Pale  |  Cierre de caja  |  ${hoje}  |  Pagina ${i} de ${pages}`, ML, doc.internal.pageSize.height - 5)
+    }
+
+    return doc.output('blob')
+  }
+
+  const openPDF = async (id) => {
+    try {
+      const res = await client.get(`/finanzas/caja/${id}/pdf/view`, { responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      window.open(url, '_blank')
+    } catch {}
   }
 
   const TABS = [
@@ -497,7 +694,7 @@ export default function Finanzas() {
         {tab === 'caja' && (
           <>
             <div className="fade-in" style={{ marginBottom: 16 }}>
-              <button onClick={() => { setModalCerrarCaja(true); setError(''); setNotasCierre('') }} style={{
+              <button onClick={() => { setModalCerrarCaja(true); setError(''); setNotasCierre(''); setTipoCierre('COMPLETO') }} style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '9px 16px', borderRadius: 10,
                 background: 'linear-gradient(135deg, #B6CD38 0%, #00753F 100%)',
@@ -515,13 +712,13 @@ export default function Finanzas() {
                 borderRadius: 16, overflow: 'hidden', overflowX: 'auto',
                 boxShadow: isDark ? '0 4px 20px -4px rgba(0,0,0,0.4)' : '0 4px 16px -4px rgba(29,84,125,0.08)',
               }}>
-                <div style={{ minWidth: 700 }}>
+                <div style={{ minWidth: 860 }}>
                 <div style={{
-                  display: 'grid', gridTemplateColumns: '150px 100px 100px 100px 100px 100px 1fr',
+                  display: 'grid', gridTemplateColumns: '130px 80px 90px 90px 90px 80px 80px 1fr 50px 100px',
                   padding: '10px 20px', borderBottom: `1px solid ${C.border}`,
                   background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(29,84,125,0.03)',
                 }}>
-                  {['Fecha cierre', 'Total ventas', 'Efectivo', 'Tarjeta', 'Cortesías', 'Gastos', 'Usuario'].map(h => (
+                  {['Fecha', 'Tipo', 'Ventas', 'Efectivo', 'Tarjeta', 'Cortesias', 'Gastos', 'Notas', 'PDF', 'Usuario'].map(h => (
                     <span key={h} style={{ fontSize: 11, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>{h}</span>
                   ))}
                 </div>
@@ -530,7 +727,7 @@ export default function Finanzas() {
                 ) : (
                   cierres.map((c, i) => (
                     <div key={c.id} style={{
-                      display: 'grid', gridTemplateColumns: '150px 100px 100px 100px 100px 100px 1fr',
+                      display: 'grid', gridTemplateColumns: '130px 80px 90px 90px 90px 80px 80px 1fr 50px 100px',
                       padding: '12px 20px', alignItems: 'center',
                       borderBottom: i < cierres.length - 1 ? `1px solid ${C.border}` : 'none',
                       transition: 'background .15s',
@@ -538,13 +735,33 @@ export default function Finanzas() {
                     onMouseEnter={e => e.currentTarget.style.background = C.hover}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
-                      <span style={{ fontSize: 12, color: C.text }}>{fmtFull(c.fecha_cierre)}</span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#B6CD38' }}>{fmt(c.total_ventas)}</span>
-                      <span style={{ fontSize: 13, color: C.text }}>{fmt(c.total_efectivo)}</span>
-                      <span style={{ fontSize: 13, color: C.text }}>{fmt(c.total_tarjeta)}</span>
-                      <span style={{ fontSize: 13, color: '#E72D8B' }}>{fmt(c.total_cortesias)}</span>
-                      <span style={{ fontSize: 13, color: '#E72D8B' }}>{fmt(c.total_gastos)}</span>
-                      <span style={{ fontSize: 12, color: C.subtext }}>{c.usuario_nombre}</span>
+                      <span style={{ fontSize: 11, color: C.text }}>{fmtFull(c.fecha_cierre)}</span>
+                      <span style={{
+                        fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 20,
+                        background: c.tipo === 'PARCIAL' ? 'rgba(245,158,11,0.12)' : 'rgba(0,117,63,0.10)',
+                        color: c.tipo === 'PARCIAL' ? '#f59e0b' : '#00753F',
+                        width: 'fit-content',
+                      }}>{c.tipo === 'PARCIAL' ? 'Parcial' : 'Completo'}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#B6CD38' }}>{fmt(c.total_ventas)}</span>
+                      <span style={{ fontSize: 12, color: C.text }}>{fmt(c.total_efectivo)}</span>
+                      <span style={{ fontSize: 12, color: C.text }}>{fmt(c.total_tarjeta)}</span>
+                      <span style={{ fontSize: 12, color: '#E72D8B' }}>{fmt(c.total_cortesias)}</span>
+                      <span style={{ fontSize: 12, color: '#E72D8B' }}>{fmt(c.total_gastos)}</span>
+                      <span style={{ fontSize: 10, color: C.subtext, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                        title={c.notas || ''}>{c.notas || '-'}</span>
+                      <span style={{ display: 'flex', justifyContent: 'center' }}>
+                        {c.pdf_generado ? (
+                          <button onClick={() => openPDF(c.id)} title="Ver PDF" style={{
+                            padding: '5px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                            background: 'rgba(231,45,139,0.10)', color: '#E72D8B',
+                            display: 'flex', transition: 'background .15s',
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(231,45,139,0.25)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(231,45,139,0.10)'}
+                          ><IcPDF /></button>
+                        ) : <span style={{ fontSize: 10, color: C.subtext }}>—</span>}
+                      </span>
+                      <span style={{ fontSize: 11, color: C.subtext }}>{c.usuario_nombre}</span>
                     </div>
                   ))
                 )}
@@ -643,8 +860,25 @@ export default function Finanzas() {
       <Modal open={modalCerrarCaja} onClose={() => setModalCerrarCaja(false)} title="Cerrar caja" isDark={isDark}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <p style={{ margin: 0, fontSize: 13, color: C.subtext }}>
-            Esto cerrará la caja del día actual consolidando todas las ventas y gastos.
+            Esto consolidara todas las ventas y gastos del dia actual en un cierre.
           </p>
+
+          <Field label="Tipo de corte">
+            <div style={{ display: 'flex', gap: 8 }}>
+              {[
+                { key: 'COMPLETO', label: 'Corte completo' },
+                { key: 'PARCIAL', label: 'Corte parcial' },
+              ].map(t => (
+                <button key={t.key} onClick={() => setTipoCierre(t.key)} style={{
+                  flex: 1, padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${tipoCierre === t.key ? '#B6CD38' : (isDark ? 'rgba(35,122,170,0.3)' : 'rgba(29,84,125,0.2)')}`,
+                  background: tipoCierre === t.key ? (isDark ? 'rgba(182,205,56,0.12)' : 'rgba(0,117,63,0.08)') : 'transparent',
+                  color: tipoCierre === t.key ? '#B6CD38' : C.subtext,
+                  fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
+                  transition: 'all .15s',
+                }}>{t.label}</button>
+              ))}
+            </div>
+          </Field>
 
           <Field label="Notas (opcional)">
             <textarea placeholder="Notas del cierre..." value={notasCierre} onChange={e => setNotasCierre(e.target.value)} rows={2} style={{

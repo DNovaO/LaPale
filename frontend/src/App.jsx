@@ -11,10 +11,16 @@ import Ventas            from '@/pages/Ventas'
 import Finanzas          from '@/pages/Finanzas'
 import Usuarios          from '@/pages/Usuarios'
 import Bitacora          from '@/pages/Bitacora'
+import Cortesias         from '@/pages/Cortesias'
+import Cobro             from '@/pages/Cobro'
 
-function AppLayout({ children }) {
+const ADMIN = ['administrador']
+const VENDEDOR = ['administrador', 'vendedor']
+const CAJERO = ['administrador', 'cajero']
+
+function AppLayout({ children, roles }) {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute roles={roles}>
       <MainLayout>{children}</MainLayout>
     </ProtectedRoute>
   )
@@ -26,13 +32,16 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
-          <Route path="/inventario" element={<AppLayout><Inventario /></AppLayout>} />
-          <Route path="/pos" element={<AppLayout><POS /></AppLayout>} />
-          <Route path="/ventas" element={<AppLayout><Ventas /></AppLayout>} />
-          <Route path="/finanzas" element={<AppLayout><Finanzas /></AppLayout>} />
-          <Route path="/usuarios" element={<AppLayout><Usuarios /></AppLayout>} />
-          <Route path="/bitacora" element={<AppLayout><Bitacora /></AppLayout>} />
+          <Route path="/dashboard" element={<AppLayout roles={CAJERO}><Dashboard /></AppLayout>} />
+          <Route path="/inventario" element={<AppLayout roles={ADMIN}><Inventario /></AppLayout>} />
+          <Route path="/pos" element={<AppLayout roles={VENDEDOR}><POS /></AppLayout>} />
+          <Route path="/cobro" element={<AppLayout roles={CAJERO}><Cobro /></AppLayout>} />
+          <Route path="/ventas" element={<AppLayout roles={CAJERO}><Ventas /></AppLayout>} />
+          <Route path="/finanzas" element={<AppLayout roles={CAJERO}><Finanzas /></AppLayout>} />
+          <Route path="/usuarios" element={<AppLayout roles={ADMIN}><Usuarios /></AppLayout>} />
+          <Route path="/bitacora" element={<AppLayout roles={ADMIN}><Bitacora /></AppLayout>} />
+          <Route path="/cortesias" element={<AppLayout roles={ADMIN}><Cortesias /></AppLayout>} />
+          <Route path="/" element={<Navigate to="/pos" replace />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </AuthProvider>

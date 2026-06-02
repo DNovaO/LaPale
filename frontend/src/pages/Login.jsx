@@ -84,7 +84,10 @@ export default function Login() {
     try {
       const data = await authService.login(form.username.trim(), form.password)
       login(data)
-      navigate('/dashboard', { replace: true })
+      const dest = data.user?.rol === 'vendedor' ? '/pos'
+        : data.user?.rol === 'cajero' ? '/cobro'
+        : '/dashboard'
+      navigate(dest, { replace: true })
     } catch (err) {
       const msg = err.response?.data?.message || 'Error al conectar con el servidor'
       setError(msg)
