@@ -40,6 +40,10 @@ services:
 
     env_file:
       - ./backend/.env
+    
+    devices:
+      - "/dev/rfcomm0:/dev/rfcomm0"
+    privileged: true  # necesario para acceso a dispositivos
 
 volumes:
   postgres_data:

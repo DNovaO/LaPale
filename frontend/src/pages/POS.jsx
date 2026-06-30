@@ -176,7 +176,7 @@ export default function POS() {
         ...(enviarACaja && { abierta: true }),
       }
 
-      const res  = await fetch(`${API}/ventas`, {
+      const res = await fetch(`${API}/ventas`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),
@@ -185,6 +185,7 @@ export default function POS() {
       if (!res.ok) throw new Error(data.message ?? 'Error al confirmar venta')
 
       setVentaExitosa({ ...data.data, cambio, enviadoACaja: enviarACaja })
+
       if (!enviarACaja) {
         setProductos(prev => prev.map(p => {
           const item = ticket.find(i => i.producto.id === p.id)
@@ -192,6 +193,33 @@ export default function POS() {
           const descuento = item.cantidad * (item.presentacion?.factor || 1)
           return { ...p, stock_actual: p.stock_actual - descuento }
         }))
+
+        try {
+          await fetch(`${API}/printer/ticket`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              NombreTienda: 'La Pale',
+              Folio: `#${data.data.ticket_numero}`,
+              Fecha: new Date().toLocaleDateString('es-MX'),
+              Vendedor: user?.nombre || '',
+              Items: ticket.map(i => ({
+                Nombre: i.producto.nombre,
+                Cantidad: i.cantidad,
+                Precio: i.presentacion?.precio || i.producto.precio,
+                Subtotal: (i.presentacion?.precio || i.producto.precio) * i.cantidad,
+              })),
+              Subtotal: subtotal,
+              Descuento: 0,
+              Total: total,
+              MetodoPago: metodo,
+              Efectivo: metodo === 'EFECTIVO' ? parseFloat(montoRecibido || total) : total,
+              Cambio: cambio,
+            }),
+          })
+        } catch (printErr) {
+          console.warn('Error al imprimir:', printErr)
+        }
       }
     } catch (e) {
       setError(e.message)

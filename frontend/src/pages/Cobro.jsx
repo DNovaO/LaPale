@@ -59,6 +59,10 @@ export default function Cobro() {
     const monto = venta.subtotal
     if (p.metodo === 'EFECTIVO' && p.monto_recibido > 0 && p.monto_recibido < monto) return
 
+    const cambio = p.metodo === 'EFECTIVO' && p.monto_recibido
+      ? Math.max(0, p.monto_recibido - venta.subtotal)
+      : 0
+
     setCobrando(ventaId)
     setError('')
     try {
@@ -66,6 +70,31 @@ export default function Cobro() {
         metodo: p.metodo,
         monto_recibido: p.metodo === 'EFECTIVO' ? p.monto_recibido : 0,
       })
+
+      // Imprimir via impresora de red
+      try {
+        await client.post('/printer/ticket', {
+          NombreTienda: 'La Pale',
+          Folio: `#${venta.ticket_numero}`,
+          Fecha: new Date().toLocaleDateString('es-MX'),
+          Vendedor: venta.vendedor_nombre,
+          Items: venta.detalle?.map(d => ({
+            Nombre: d.producto_nombre,
+            Cantidad: d.cantidad,
+            Precio: d.precio_unitario ?? (d.subtotal / d.cantidad),
+            Subtotal: d.subtotal,
+          })) || [],
+          Subtotal: venta.subtotal,
+          Descuento: 0,
+          Total: venta.subtotal,
+          MetodoPago: p.metodo,
+          Efectivo: p.metodo === 'EFECTIVO' ? p.monto_recibido : venta.subtotal,
+          Cambio: cambio,
+        })
+      } catch (printErr) {
+        console.warn('Error al imprimir:', printErr)
+      }
+
       setPendientes(prev => prev.filter(v => v.id !== ventaId))
     } catch (e) {
       setError(e.response?.data?.message || 'Error al cobrar')
