@@ -197,7 +197,7 @@ func (r *Repository) GetDashboard(sucursalID string) (*DashboardCortesia, error)
 	var total int
 	err := r.db.QueryRow(context.Background(), `
 		SELECT COALESCE(SUM(cantidad), 0) FROM cortesias_otorgadas
-		WHERE sucursal_id=$1 AND created_at::date=$2
+		WHERE sucursal_id=$1 AND (created_at AT TIME ZONE 'America/Mexico_City')::date=$2
 	`, sucursalID, today).Scan(&total)
 	if err != nil {
 		return nil, err
@@ -209,7 +209,7 @@ func (r *Repository) GetDashboard(sucursalID string) (*DashboardCortesia, error)
 			COALESCE(SUM(co.cantidad), 0)
 		FROM reglas_cortesia rc
 		JOIN productos p ON p.id = rc.producto_id
-		LEFT JOIN cortesias_otorgadas co ON co.regla_id = rc.id AND co.created_at::date = $2
+		LEFT JOIN cortesias_otorgadas co ON co.regla_id = rc.id AND co.(created_at AT TIME ZONE 'America/Mexico_City')::date = $2
 		WHERE rc.sucursal_id = $1 AND rc.activa = true
 		GROUP BY rc.id, rc.nombre, p.nombre, rc.limite_diario
 		ORDER BY rc.monto_minimo ASC
@@ -247,7 +247,7 @@ func (r *Repository) GetDashboard(sucursalID string) (*DashboardCortesia, error)
 		SELECT co.vendedor_id, u.nombre, COALESCE(SUM(co.cantidad), 0)
 		FROM cortesias_otorgadas co
 		JOIN usuarios u ON u.id = co.vendedor_id
-		WHERE co.sucursal_id=$1 AND co.created_at::date=$2
+		WHERE co.sucursal_id=$1 AND co.(created_at AT TIME ZONE 'America/Mexico_City')::date=$2
 		GROUP BY co.vendedor_id, u.nombre
 		ORDER BY SUM(co.cantidad) DESC
 	`, sucursalID, today)
@@ -283,12 +283,12 @@ func (r *Repository) GetHistorial(filtros FiltrosHistorial) ([]CortesiaOtorgada,
 	i := 2
 
 	if filtros.FechaDesde != "" {
-		query += fmt.Sprintf(" AND co.created_at::date >= $%d", i)
+		query += fmt.Sprintf(" AND co.(created_at AT TIME ZONE 'America/Mexico_City')::date >= $%d", i)
 		args = append(args, filtros.FechaDesde)
 		i++
 	}
 	if filtros.FechaHasta != "" {
-		query += fmt.Sprintf(" AND co.created_at::date <= $%d", i)
+		query += fmt.Sprintf(" AND co.(created_at AT TIME ZONE 'America/Mexico_City')::date <= $%d", i)
 		args = append(args, filtros.FechaHasta)
 		i++
 	}

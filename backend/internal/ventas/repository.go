@@ -47,7 +47,7 @@ func (r *Repository) FindAll(filtros FiltrosVenta) ([]Venta, error) {
 		i++
 	}
 	if filtros.Fecha != "" {
-		query += fmt.Sprintf(" AND v.created_at::date=$%d", i)
+		query += fmt.Sprintf(" AND (v.created_at AT TIME ZONE 'America/Mexico_City')::date=$%d", i)
 		args = append(args, filtros.Fecha)
 		i++
 	}
@@ -403,7 +403,7 @@ func (r *Repository) GetTopProductos(sucursalID, fecha string, limite int) ([]To
 			AND v.estado = 'CERRADA'
 			AND v.tipo = 'NORMAL'
 			AND d.es_cortesia = false
-			AND v.created_at::date = $2::date
+			AND (v.created_at AT TIME ZONE 'America/Mexico_City')::date = $2::date
 		GROUP BY d.producto_id, p.nombre, p.medida
 		ORDER BY SUM(d.cantidad) DESC
 		LIMIT $3
@@ -434,7 +434,7 @@ func (r *Repository) FindPendientes(sucursalID string) ([]Venta, error) {
 		JOIN usuarios u ON u.id = v.vendedor_id
 		WHERE v.sucursal_id = $1
 			AND v.estado = 'ABIERTA'
-			AND v.created_at::date = CURRENT_DATE
+			AND (v.created_at AT TIME ZONE 'America/Mexico_City')::date = CURRENT_DATE
 		ORDER BY v.created_at ASC
 	`, sucursalID)
 	if err != nil {

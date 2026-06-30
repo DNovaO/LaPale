@@ -105,7 +105,7 @@ func (r *Repository) GetResumenDia(sucursalID, fecha string) (*ResumenDia, error
 		WHERE v.sucursal_id=$1
 			AND v.estado='CERRADA'
 			AND v.tipo='NORMAL'
-			AND v.created_at::date=$2
+			AND (v.created_at AT TIME ZONE 'America/Mexico_City')::date=$2
 	`, sucursalID, fecha,
 	).Scan(
 		&resumen.TotalVentas, &resumen.NumVentas,
@@ -125,7 +125,7 @@ func (r *Repository) GetResumenDia(sucursalID, fecha string) (*ResumenDia, error
 		WHERE v.sucursal_id=$1
 			AND dv.es_cortesia = true
 			AND v.estado='CERRADA'
-			AND v.created_at::date=$2
+			AND (v.created_at AT TIME ZONE 'America/Mexico_City')::date=$2
 	`, sucursalID, fecha,
 	).Scan(&resumen.TotalCortesias, &resumen.NumCortesias)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -156,7 +156,7 @@ func (r *Repository) GetResumenDia(sucursalID, fecha string) (*ResumenDia, error
 		WHERE v.sucursal_id=$1
 			AND v.estado='CERRADA'
 			AND v.tipo='NORMAL'
-			AND v.created_at::date=$2
+			AND (v.created_at AT TIME ZONE 'America/Mexico_City')::date=$2
 		GROUP BY d.producto_id, p.nombre
 		ORDER BY cantidad DESC
 		LIMIT 5
@@ -190,7 +190,7 @@ func (r *Repository) GetResumenPeriodo(filtros FiltrosPeriodo) (*ResumenPeriodo,
 		WHERE v.sucursal_id=$1
 			AND v.estado='CERRADA'
 			AND v.tipo='NORMAL'
-			AND v.created_at::date BETWEEN $2 AND $3
+			AND (v.created_at AT TIME ZONE 'America/Mexico_City')::date BETWEEN $2 AND $3
 	`, filtros.SucursalID, filtros.Desde, filtros.Hasta,
 	).Scan(&resumen.TotalVentas, &resumen.NumVentas)
 	if err != nil {
@@ -214,7 +214,7 @@ func (r *Repository) GetResumenPeriodo(filtros FiltrosPeriodo) (*ResumenPeriodo,
 		WHERE v.sucursal_id=$1
 			AND dv.es_cortesia = true
 			AND v.estado='CERRADA'
-			AND v.created_at::date BETWEEN $2 AND $3
+			AND (v.created_at AT TIME ZONE 'America/Mexico_City')::date BETWEEN $2 AND $3
 	`, filtros.SucursalID, filtros.Desde, filtros.Hasta,
 	).Scan(&resumen.TotalCortesias)
 	if err != nil {
@@ -228,21 +228,21 @@ func (r *Repository) GetResumenPeriodo(filtros FiltrosPeriodo) (*ResumenPeriodo,
 func (r *Repository) GetResumenSemana(sucursalID string) ([]ResumenDiario, error) {
 	rows, err := r.db.Query(context.Background(), `
 		SELECT
-			v.created_at::date::text,
+			(v.created_at AT TIME ZONE 'America/Mexico_City')::date::text,
 			COALESCE(SUM(v.total), 0),
 			COUNT(v.id),
 			COALESCE(SUM(v.total), 0)
 				- COALESCE((
 					SELECT SUM(g.monto) FROM gastos g
-					WHERE g.sucursal_id = $1 AND g.fecha = v.created_at::date
+					WHERE g.sucursal_id = $1 AND g.fecha = (v.created_at AT TIME ZONE 'America/Mexico_City')::date
 				), 0)
 		FROM ventas v
 		WHERE v.sucursal_id = $1
 			AND v.estado = 'CERRADA'
 			AND v.tipo = 'NORMAL'
 			AND v.created_at >= (CURRENT_DATE - INTERVAL '6 days')
-		GROUP BY v.created_at::date
-		ORDER BY v.created_at::date ASC
+		GROUP BY (v.created_at AT TIME ZONE 'America/Mexico_City')::date
+		ORDER BY (v.created_at AT TIME ZONE 'America/Mexico_City')::date ASC
 	`, sucursalID)
 	if err != nil {
 		return nil, err

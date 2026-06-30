@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -19,7 +20,17 @@ func Connect() (*pgxpool.Pool, error) {
 		os.Getenv("DB_NAME"),
 	)
 
-	db, err := pgxpool.New(context.Background(), dsn)
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, "SET timezone TO 'America/Mexico_City'")
+		return err
+	}
+
+	db, err := pgxpool.NewWithConfig(context.Background(), config)
 
 	if err != nil {
 		return nil, err

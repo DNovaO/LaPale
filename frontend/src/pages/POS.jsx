@@ -97,18 +97,37 @@ export default function POS() {
       const key = presentacion ? `${producto.id}_${presentacion.etiqueta}` : producto.id
       const existe = prev.find(i => {
         const ik = i.presentacion ? `${i.producto.id}_${i.presentacion.etiqueta}` : i.producto.id
-        return ik === key
+        return ik === key && !i.esCortesia
       })
       if (existe) {
         return prev.map(i => {
           const ik = i.presentacion ? `${i.producto.id}_${i.presentacion.etiqueta}` : i.producto.id
-          return ik === key ? { ...i, cantidad: i.cantidad + cantidad } : i
+          return ik === key && !i.esCortesia ? { ...i, cantidad: i.cantidad + cantidad } : i
         })
       }
-      return [...prev, { producto, cantidad, presentacion: presentacion || null }]
+      return [...prev, { producto, cantidad, presentacion: presentacion || null, esCortesia: false }]
     })
     setPresentPanel(null)
     if (!isTouch.current) searchRef.current?.focus()
+  }
+
+  const toggleCortesiaItem = (itemIdx) => {
+    setTicket(prev => {
+      const item = prev[itemIdx]
+      if (item.cantidad > 1) {
+        const before = prev.slice(0, itemIdx)
+        const after = prev.slice(itemIdx + 1)
+        return [
+          ...before,
+          { ...item, cantidad: 1, esCortesia: !item.esCortesia },
+          { ...item, cantidad: item.cantidad - 1, esCortesia: item.esCortesia },
+          ...after,
+        ]
+      }
+      const newTicket = [...prev]
+      newTicket[itemIdx] = { ...item, esCortesia: !item.esCortesia }
+      return newTicket
+    })
   }
 
   const cambiarCantidad = (itemIdx, delta) => {
@@ -130,6 +149,7 @@ export default function POS() {
   }
 
   const subtotal  = ticket.reduce((s, i) => {
+    if (i.esCortesia) return s
     const precio = i.presentacion?.precio || i.producto.precio
     return s + precio * i.cantidad
   }, 0)
@@ -169,6 +189,7 @@ export default function POS() {
           cantidad: i.cantidad,
           precio_unitario: i.presentacion?.precio || i.producto.precio,
           factor_consumo: i.presentacion?.factor || 1,
+          es_cortesia: i.esCortesia || false,
         })),
         pago: enviarACaja
           ? { metodo: 'EFECTIVO', monto_recibido: 0 }
@@ -204,10 +225,10 @@ export default function POS() {
               Fecha: new Date().toLocaleDateString('es-MX'),
               Vendedor: user?.nombre || '',
               Items: ticket.map(i => ({
-                Nombre: i.producto.nombre,
+                Nombre: i.producto.nombre + (i.esCortesia ? ' (Cortesia)' : ''),
                 Cantidad: i.cantidad,
-                Precio: i.presentacion?.precio || i.producto.precio,
-                Subtotal: (i.presentacion?.precio || i.producto.precio) * i.cantidad,
+                Precio: i.esCortesia ? 0 : (i.presentacion?.precio || i.producto.precio),
+                Subtotal: i.esCortesia ? 0 : (i.presentacion?.precio || i.producto.precio) * i.cantidad,
               })),
               Subtotal: subtotal,
               Descuento: 0,
@@ -396,17 +417,28 @@ export default function POS() {
                   <div key={idx} style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     padding: '10px 8px', borderBottom: `1px solid ${C.border}`,
+                    opacity: item.esCortesia ? 0.7 : 1,
                   }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: item.esCortesia ? C.pink : C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {item.producto.nombre}
                       </p>
                       {item.presentacion && (
                         <p style={{ margin: 0, fontSize: 11, color: C.subtext }}>{item.presentacion.etiqueta}</p>
                       )}
-                      <p style={{ margin: 0, fontSize: 12, color: C.subtext }}>{fmt(precio) + ' c/u'}</p>
+                      <p style={{ margin: 0, fontSize: 12, color: item.esCortesia ? C.pink : C.subtext }}>
+                        {item.esCortesia ? 'Cortesia' : fmt(precio) + ' c/u'}
+                      </p>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                      {user?.rol === 'administrador' && (
+                        <button onClick={() => toggleCortesiaItem(idx)} title="Marcar como cortesia" style={{
+                          width: 24, height: 24, borderRadius: 6, border: 'none', cursor: 'pointer', padding: 0,
+                          background: item.esCortesia ? 'rgba(231,45,139,0.15)' : 'transparent',
+                          color: item.esCortesia ? C.pink : C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          transition: 'all .1s', fontSize: 12,
+                        }}><IcGift /></button>
+                      )}
                       <CantidadBtn onClick={() => cambiarCantidad(idx, -1)} C={C}><IcMinus /></CantidadBtn>
                       <span style={{ fontSize: 13, fontWeight: 600, color: C.text, minWidth: 20, textAlign: 'center' }}>{item.cantidad}</span>
                       <CantidadBtn onClick={() => cambiarCantidad(idx, 1)}
@@ -414,8 +446,8 @@ export default function POS() {
                         C={C}><IcPlus /></CantidadBtn>
                       <CantidadBtn onClick={() => quitarItem(idx)} C={C} danger><IcTrash /></CantidadBtn>
                     </div>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: C.lime, minWidth: 60, textAlign: 'right', flexShrink: 0 }}>
-                      {fmt(precio * item.cantidad)}
+                    <span style={{ fontSize: 13, fontWeight: 600, color: item.esCortesia ? C.pink : C.lime, minWidth: 60, textAlign: 'right', flexShrink: 0 }}>
+                      {item.esCortesia ? '$0.00' : fmt(precio * item.cantidad)}
                     </span>
                   </div>
                 )
@@ -641,7 +673,7 @@ function TicketModal({ venta, C, onNuevaVenta }) {
               padding: '4px 0', borderBottom: `1px solid ${C.border}`,
               opacity: d.es_cortesia ? 0.8 : 1,
             }}>
-              <span>{d.producto_nombre} × {d.cantidad}{d.es_cortesia ? ' 🎁' : ''}</span>
+              <span>{d.producto_nombre} x {d.cantidad}</span>
               <span style={{ fontWeight: 600 }}>{d.es_cortesia ? 'Gratis' : fmt(d.subtotal)}</span>
             </div>
           ))}
