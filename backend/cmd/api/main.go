@@ -9,6 +9,7 @@ import (
 	"paleteria-system/internal/config"
 	"paleteria-system/internal/cortesias"
 	"paleteria-system/internal/database"
+	"paleteria-system/internal/email"
 	"paleteria-system/internal/finanzas"
 	"paleteria-system/internal/inventario"
 	"paleteria-system/internal/printer"
@@ -67,8 +68,9 @@ func main() {
 	cortesias.RegisterRoutes(api, db)
 	ventas.RegisterRoutes(api, db, csService)
 
-	// Después de las otras rutas:
+	// Depend
 	printer.RegisterRoutes(api)
+	email.RegisterRoutes(api)
 
 	finanzas.RegisterRoutes(api, db)
 	bitacora.RegisterRoutes(

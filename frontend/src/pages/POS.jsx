@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 
@@ -24,7 +24,7 @@ function parsePresentaciones(raw) {
   try {
     const arr = typeof raw === 'string' ? JSON.parse(raw) : raw
     if (Array.isArray(arr) && arr.length > 0) return arr
-  } catch {}
+  } catch { /* empty */ }
   return null
 }
 
@@ -33,7 +33,6 @@ export default function POS() {
   const { theme }         = useTheme()
   const isDark            = theme === 'dark'
   const searchRef         = useRef(null)
-  const isTouch            = useRef(typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
 
   const [productos,    setProductos]    = useState([])
   const [busqueda,     setBusqueda]     = useState('')
@@ -47,6 +46,7 @@ export default function POS() {
   const [presentPanel, setPresentPanel] = useState(null) // producto con presentaciones abierto
   const [previewCortesia, setPreviewCortesia] = useState(null)
   const [forzarEnvio, setForzarEnvio] = useState(false)
+  const [isTouch] = useState(() => typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
 
   const esFinde = [5, 6, 0].includes(new Date().getDay())
   const enviarACaja = forzarEnvio || (esFinde && user?.rol === 'vendedor')
@@ -108,7 +108,7 @@ export default function POS() {
       return [...prev, { producto, cantidad, presentacion: presentacion || null, esCortesia: false }]
     })
     setPresentPanel(null)
-    if (!isTouch.current) searchRef.current?.focus()
+    if (!isTouch) searchRef.current?.focus()
   }
 
   const toggleCortesiaItem = (itemIdx) => {
@@ -145,7 +145,8 @@ export default function POS() {
     setMetodo('EFECTIVO')
     setMontoRecibido('')
     setError('')
-    if (!isTouch.current) searchRef.current?.focus()
+    setPreviewCortesia(null)
+    if (!isTouch) searchRef.current?.focus()
   }
 
   const subtotal  = ticket.reduce((s, i) => {
@@ -162,7 +163,7 @@ export default function POS() {
     (enviarACaja || metodo !== 'EFECTIVO' || !montoRecibido || parseFloat(montoRecibido) >= total)
 
   useEffect(() => {
-    if (subtotal <= 0) { setPreviewCortesia(null); return }
+    if (subtotal <= 0) return
     let cancelled = false
     const timer = setTimeout(async () => {
       try {
@@ -253,8 +254,8 @@ export default function POS() {
     return (
       <TicketModal
         venta={ventaExitosa}
-        isDark={isDark}
         C={C}
+        token={token}
         onNuevaVenta={() => { setVentaExitosa(null); limpiarTicket() }}
       />
     )
@@ -289,8 +290,7 @@ export default function POS() {
               </span>
               <input
                 ref={searchRef}
-                autoFocus={!isTouch.current}
-                value={busqueda}
+                autoFocus={!isTouch}                value={busqueda}
                 onChange={e => setBusqueda(e.target.value)}
                 placeholder="Buscar producto o SKU..."
                 style={{
@@ -624,7 +624,43 @@ function CantidadBtn({ onClick, disabled, children, C, danger }) {
   )
 }
 
-function TicketModal({ venta, C, onNuevaVenta }) {
+function TicketModal({ venta, C, onNuevaVenta, token }) {
+  const [emailCliente, setEmailCliente] = useState('')
+  const [enviandoCorreo, setEnviandoCorreo] = useState(false)
+  const [estadoEmail, setEstadoEmail] = useState(null) // 'ok' | 'error'
+  const [mensajeEmail, setMensajeEmail] = useState('')
+
+  const enviarTicketEmail = async () => {
+    if (!emailCliente.trim()) return
+    setEnviandoCorreo(true); setEstadoEmail(null)
+    try {
+      const res = await fetch(`${API}/email/ticket`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          email: emailCliente.trim(),
+          ticket_numero: venta.ticket_numero,
+          total: venta.total,
+          metodo: venta.metodo || 'EFECTIVO',
+          items: venta.detalle?.map(d => ({
+            nombre: d.producto_nombre + (d.es_cortesia ? ' (Cortesia)' : ''),
+            cantidad: d.cantidad,
+            precio: d.precio_unitario,
+          })) || [],
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message || 'Error al enviar')
+      setEstadoEmail('ok')
+      setMensajeEmail('Ticket enviado con exito')
+    } catch (e) {
+      setEstadoEmail('error')
+      setMensajeEmail(e.message || 'Error al enviar')
+    } finally {
+      setEnviandoCorreo(false)
+    }
+  }
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100vh - 112px)' }}>
       <div style={{
@@ -688,6 +724,37 @@ function TicketModal({ venta, C, onNuevaVenta }) {
             </div>
           )}
         </div>
+
+        <div style={{ marginBottom: 16, textAlign: 'left' }}>
+          <input
+            type="email"
+            value={emailCliente}
+            onChange={e => { setEmailCliente(e.target.value); setEstadoEmail(null) }}
+            placeholder="Correo del cliente para enviar ticket"
+            style={{
+              width: '100%', padding: '10px 12px', borderRadius: 10,
+              border: `1px solid ${C.border}`, background: C.inputBg, color: C.text,
+              fontSize: 13, outline: 'none', fontFamily: 'inherit', marginBottom: 8,
+            }}
+          />
+          <button onClick={enviarTicketEmail} disabled={enviandoCorreo || !emailCliente.trim()}
+            style={{
+              width: '100%', padding: '10px', borderRadius: 10, border: 'none',
+              background: enviandoCorreo || !emailCliente.trim() ? C.border : '#237AAA',
+              color: enviandoCorreo || !emailCliente.trim() ? C.muted : '#fff',
+              fontWeight: 600, fontSize: 13, cursor: enviandoCorreo || !emailCliente.trim() ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit', transition: 'all .15s',
+            }}>
+            {enviandoCorreo ? 'Enviando...' : 'Enviar ticket por correo'}
+          </button>
+          {estadoEmail === 'ok' && (
+            <p style={{ margin: '6px 0 0', fontSize: 11, color: '#00753F', textAlign: 'center' }}>{mensajeEmail}</p>
+          )}
+          {estadoEmail === 'error' && (
+            <p style={{ margin: '6px 0 0', fontSize: 11, color: C.pink, textAlign: 'center' }}>{mensajeEmail}</p>
+          )}
+        </div>
+
         <button onClick={onNuevaVenta} style={{
           width: '100%', padding: '13px', borderRadius: 12, border: 'none',
           background: 'linear-gradient(135deg, #B6CD38 0%, #00753F 100%)',
