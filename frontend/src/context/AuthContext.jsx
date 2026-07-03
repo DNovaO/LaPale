@@ -9,14 +9,32 @@ export function AuthProvider({ children }) {
       return saved ? JSON.parse(saved) : null
     } catch { return null }
   })
-  const [token, setToken]   = useState(() => localStorage.getItem('token'))
+  const [token, setToken]   = useState(() => {
+    const savedToken = localStorage.getItem('token')
+    // Si hay token guardado, actualizar IP de impresora en background
+    if (savedToken) {
+      fetch('/api/update-printer-ip', {
+        headers: { Authorization: `Bearer ${savedToken}` }
+      }).catch(() => {})
+    }
+    return savedToken
+  })
   const [loading]           = useState(false)
 
-  const login = (data) => {
+  const login = async (data) => {
     setToken(data.token)
     setUser(data.user)
     localStorage.setItem('token', data.token)
     localStorage.setItem('user', JSON.stringify(data.user))
+
+    // Actualizar IP de la impresora automáticamente al hacer login
+    try {
+      await fetch('/api/update-printer-ip', {
+        headers: { Authorization: `Bearer ${data.token}` }
+      })
+    } catch (e) {
+      console.warn('No se pudo actualizar IP impresora:', e)
+    }
   }
 
   const logout = () => {
