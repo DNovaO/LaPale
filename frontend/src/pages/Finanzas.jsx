@@ -56,7 +56,10 @@ const IcPDF = () => (
 )
 
 const fmt = n => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n || 0)
-const today = () => new Date().toISOString().split('T')[0]
+const today = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
 const fmtDT = d => new Date(d + 'T12:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
 const fmtFull = d => new Date(d).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
@@ -201,7 +204,7 @@ export default function Finanzas() {
     try {
       await finanzasService.deleteGasto(id)
       fetchData()
-    } catch {}
+    } catch { /* empty */ }
   }
 
   const handleCerrarCaja = async () => {
@@ -377,7 +380,6 @@ export default function Finanzas() {
       doc.setFillColor(...LIGHT)
       doc.rect(ML, footY - 3, MW, 6.5, 'F')
       doc.text(`Valor total del inventario:  ${fmt(totalInv)}`, ML + MW / 2, footY + 1.5, { align: 'center' })
-      y = footY + 5
     }
 
     // --- Footer ---
@@ -398,7 +400,7 @@ export default function Finanzas() {
       const res = await client.get(`/finanzas/caja/${id}/pdf/view`, { responseType: 'blob' })
       const url = URL.createObjectURL(res.data)
       window.open(url, '_blank')
-    } catch {}
+    } catch { /* empty */ }
   }
 
   const TABS = [

@@ -9,14 +9,16 @@ const IcTrend = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none
 const IcCash = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>
 const IcCard = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
 const IcGift = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
-const IcAlert = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><triangle points="10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
 const IcTransfer = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
 const IcRefresh = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
 
 const fmt = n => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2 }).format(n || 0)
 const fmtNum = n => new Intl.NumberFormat('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0)
 const fmtDate = d => new Date(d).toLocaleString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true })
-const today = () => new Date().toISOString().split('T')[0]
+const today = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
 
 const saludo = () => {
   const h = new Date().getHours()
@@ -78,15 +80,18 @@ function PieChart({ data, isDark }) {
     return `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2} Z`
   }
 
-  const segments = data.map((d, i) => {
-    const pct = d.value / total
-    const angle = pct * 2 * Math.PI
-    const endAngle = startAngle + angle
-    const path = describeArc(startAngle, endAngle)
-    const seg = { ...d, color: colors[i], path, pct }
-    startAngle = endAngle
-    return seg
-  })
+  const segments = (() => {
+    let angle = 0
+    return data.map((d, i) => {
+      const pct = d.value / total
+      const a = pct * 2 * Math.PI
+      const end = angle + a
+      const path = describeArc(angle, end)
+      const seg = { ...d, color: colors[i], path, pct }
+      angle = end
+      return seg
+    })
+  })()
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
@@ -111,9 +116,6 @@ function PieChart({ data, isDark }) {
 
 // ── BarChart (vertical) ──────────────────────────────────────
 function BarChart({ data, isDark, labelKey, valueKey, color, formatVal }) {
-  if (!data?.length) return <EmptyPlaceholder isDark={isDark} text="Sin datos" />
-  const max = Math.max(...data.map(d => d[valueKey]), 1)
-  const barW = 32
   const scrollRef = useRef(null)
   const [canScroll, setCanScroll] = useState({ left: false, right: false })
 
@@ -129,6 +131,11 @@ function BarChart({ data, isDark, labelKey, valueKey, color, formatVal }) {
     if (el) el.addEventListener('scroll', checkScroll)
     return () => { if (el) el.removeEventListener('scroll', checkScroll) }
   }, [checkScroll, data])
+
+  if (!data?.length) return <EmptyPlaceholder isDark={isDark} text="Sin datos" />
+
+  const max = Math.max(...data.map(d => d[valueKey]), 1)
+  const barW = 32
 
   const scroll = (dir) => {
     const el = scrollRef.current
@@ -300,13 +307,13 @@ export default function Dashboard() {
   ], [resumen])
 
   const ventasPorHora = useMemo(() => {
-    const hours = Array(12).fill(0) // 7am-6pm
+    const hours = Array(12).fill(0) // 10am-9pm
     ventas.forEach(v => {
       const h = new Date(v.created_at).getHours()
-      const idx = h - 7
+      const idx = h - 10
       if (idx >= 0 && idx < 12) hours[idx] += v.total
     })
-    return hours.map((v, i) => ({ label: `${i + 7}h`, value: v }))
+    return hours.map((v, i) => ({ label: `${i + 10}h`, value: v }))
   }, [ventas])
 
   const topVendedores = useMemo(() => {
