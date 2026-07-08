@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useTheme } from '@/context/ThemeContext'
 import { finanzasService } from '@/services/finanzas.service'
 import { inventarioService } from '@/services/inventario.service'
@@ -116,6 +117,193 @@ function Field({ label, children }) {
         {label}
       </label>
       {children}
+    </div>
+  )
+}
+
+const isoToDisplay = iso => {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  if (!y || !m || !d) return ''
+  return `${d}/${m}/${y}`
+}
+
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+const DIAS_SEM = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do']
+
+function DateInput({ value, onChange, style, isDark, placeholder = 'DD/MM/AAAA' }) {
+  const [text, setText] = useState(isoToDisplay(value))
+  const [prevValue, setPrevValue] = useState(value)
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const wrapRef = useRef(null)
+  const popRef = useRef(null)
+
+  const parseIso = (iso) => {
+    if (!iso) return new Date()
+    const [y, m, d] = iso.split('-').map(Number)
+    return new Date(y, m - 1, d)
+  }
+  const [view, setView] = useState(() => parseIso(value))
+
+  if (value !== prevValue) {
+    setPrevValue(value)
+    setText(isoToDisplay(value))
+  }
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e) => {
+      if (wrapRef.current?.contains(e.target)) return
+      if (popRef.current?.contains(e.target)) return
+      setOpen(false)
+    }
+    const reposition = () => {
+      const el = wrapRef.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      const width = 244
+      let left = r.left
+      if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8
+      setPos({ top: r.bottom + 6, left: Math.max(8, left) })
+    }
+    reposition()
+    document.addEventListener('mousedown', onDown)
+    window.addEventListener('resize', reposition)
+    window.addEventListener('scroll', reposition, true)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      window.removeEventListener('resize', reposition)
+      window.removeEventListener('scroll', reposition, true)
+    }
+  }, [open])
+
+  const commit = (raw) => {
+    if (raw.length !== 8) return
+    const dd = raw.slice(0, 2), mm = raw.slice(2, 4), yyyy = raw.slice(4)
+    if (Number(mm) < 1 || Number(mm) > 12 || Number(dd) < 1 || Number(dd) > 31) return
+    const iso = `${yyyy}-${mm}-${dd}`
+    const d = new Date(iso + 'T12:00:00')
+    if (!isNaN(d.getTime())) onChange(iso)
+  }
+
+  const handleChange = (e) => {
+    const raw = e.target.value.replace(/\D/g, '').slice(0, 8)
+    let out = raw
+    if (raw.length > 4) out = `${raw.slice(0, 2)}/${raw.slice(2, 4)}/${raw.slice(4)}`
+    else if (raw.length > 2) out = `${raw.slice(0, 2)}/${raw.slice(2)}`
+    setText(out)
+    commit(raw)
+  }
+
+  const handleBlur = () => setText(isoToDisplay(value))
+
+  const openCal = () => {
+    setView(parseIso(value))
+    setOpen(o => !o)
+  }
+
+  const selectDay = (day) => {
+    const y = view.getFullYear()
+    const m = String(view.getMonth() + 1).padStart(2, '0')
+    const d = String(day).padStart(2, '0')
+    onChange(`${y}-${m}-${d}`)
+    setOpen(false)
+  }
+
+  const buildGrid = () => {
+    const y = view.getFullYear(), m = view.getMonth()
+    const first = new Date(y, m, 1)
+    const offset = (first.getDay() + 6) % 7
+    const days = new Date(y, m + 1, 0).getDate()
+    const cells = Array(offset).fill(null)
+    for (let d = 1; d <= days; d++) cells.push(d)
+    return cells
+  }
+
+  const selDate = parseIso(value)
+  const isSelected = (d) => value && selDate.getFullYear() === view.getFullYear() && selDate.getMonth() === view.getMonth() && selDate.getDate() === d
+  const todayD = new Date()
+  const isToday = (d) => todayD.getFullYear() === view.getFullYear() && todayD.getMonth() === view.getMonth() && todayD.getDate() === d
+
+  const cText = isDark ? '#F1F6F6' : '#0C0F14'
+  const cSub = isDark ? '#237AAA' : '#1D547D'
+  const cBorder = isDark ? 'rgba(35,122,170,0.2)' : 'rgba(29,84,125,0.15)'
+
+  const navBtn = {
+    background: 'none', border: 'none', cursor: 'pointer', color: cSub,
+    fontSize: 18, padding: '2px 8px', borderRadius: 6, fontFamily: 'inherit', lineHeight: 1,
+  }
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <div style={{ position: 'relative', display: 'flex' }}>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={text}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          placeholder={placeholder}
+          style={{ ...style, paddingRight: 36, width: '100%', boxSizing: 'border-box' }}
+        />
+        <button type="button" onClick={openCal} title="Abrir calendario" style={{
+          position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+          background: 'none', border: 'none', cursor: 'pointer', color: cSub,
+          display: 'flex', alignItems: 'center', padding: 4, borderRadius: 6,
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+        </button>
+      </div>
+
+      {open && createPortal(
+        <div ref={popRef} style={{
+          position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999,
+          width: 244, padding: 12, borderRadius: 14,
+          background: isDark ? '#0a1929' : 'white',
+          border: `1px solid ${cBorder}`,
+          boxShadow: isDark ? '0 16px 40px -8px rgba(0,0,0,0.7)' : '0 16px 40px -8px rgba(29,84,125,0.25)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <button type="button" style={navBtn} onClick={() => setView(v => new Date(v.getFullYear(), v.getMonth() - 1, 1))}>‹</button>
+            <span style={{ fontSize: 13, fontWeight: 600, color: cText }}>{MESES[view.getMonth()]} {view.getFullYear()}</span>
+            <button type="button" style={navBtn} onClick={() => setView(v => new Date(v.getFullYear(), v.getMonth() + 1, 1))}>›</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
+            {DIAS_SEM.map(d => (
+              <span key={d} style={{ fontSize: 10, fontWeight: 600, color: cSub, textAlign: 'center', padding: '2px 0' }}>{d}</span>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+            {buildGrid().map((d, i) => d === null ? <span key={i} /> : (
+              <button key={i} type="button" onClick={() => selectDay(d)} style={{
+                aspectRatio: '1', border: 'none', cursor: 'pointer', borderRadius: 8,
+                fontSize: 12, fontFamily: 'inherit', fontWeight: isSelected(d) ? 700 : 500,
+                background: isSelected(d) ? '#B6CD38' : 'transparent',
+                color: isSelected(d) ? '#0C0F14' : cText,
+                outline: isToday(d) && !isSelected(d) ? `1.5px solid ${cSub}` : 'none',
+                transition: 'background .12s',
+              }}
+              onMouseEnter={e => { if (!isSelected(d)) e.currentTarget.style.background = isDark ? 'rgba(35,122,170,0.15)' : 'rgba(29,84,125,0.08)' }}
+              onMouseLeave={e => { if (!isSelected(d)) e.currentTarget.style.background = 'transparent' }}
+              >{d}</button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, paddingTop: 10, borderTop: `1px solid ${cBorder}` }}>
+            <button type="button" onClick={() => { onChange(today()); setOpen(false) }} style={{
+              background: 'none', border: 'none', cursor: 'pointer', color: cSub,
+              fontSize: 12, fontWeight: 600, fontFamily: 'inherit', padding: '2px 4px',
+            }}>Hoy</button>
+            <button type="button" onClick={() => setOpen(false)} style={{
+              background: 'none', border: 'none', cursor: 'pointer', color: cSub,
+              fontSize: 12, fontFamily: 'inherit', padding: '2px 4px',
+            }}>Cerrar</button>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
@@ -472,7 +660,7 @@ export default function Finanzas() {
             <div className="fade-in finanzas-filter" style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Día</span>
-                <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={{
+                <DateInput value={fecha} onChange={setFecha} isDark={isDark} style={{
                   padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
                   fontFamily: 'inherit', background: C.card, color: C.text,
                   border: `1px solid ${C.border}`,
@@ -480,7 +668,7 @@ export default function Finanzas() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Desde</span>
-                <input type="date" value={desde} onChange={e => setDesde(e.target.value)} style={{
+                <DateInput value={desde} onChange={setDesde} isDark={isDark} style={{
                   padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
                   fontFamily: 'inherit', background: C.card, color: C.text,
                   border: `1px solid ${C.border}`,
@@ -488,7 +676,7 @@ export default function Finanzas() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Hasta</span>
-                <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} style={{
+                <DateInput value={hasta} onChange={setHasta} isDark={isDark} style={{
                   padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
                   fontFamily: 'inherit', background: C.card, color: C.text,
                   border: `1px solid ${C.border}`,
@@ -603,14 +791,14 @@ export default function Finanzas() {
             <div className="fade-in finanzas-filter" style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Desde</span>
-                <input type="date" value={desde} onChange={e => setDesde(e.target.value)} style={{
+                <DateInput value={desde} onChange={setDesde} isDark={isDark} style={{
                   padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
                   fontFamily: 'inherit', background: C.card, color: C.text, border: `1px solid ${C.border}`,
                 }} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Hasta</span>
-                <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} style={{
+                <DateInput value={hasta} onChange={setHasta} isDark={isDark} style={{
                   padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
                   fontFamily: 'inherit', background: C.card, color: C.text, border: `1px solid ${C.border}`,
                 }} />
@@ -804,7 +992,7 @@ export default function Finanzas() {
               }} />
             </Field>
             <Field label="Fecha">
-              <input type="date" value={formGasto.fecha} onChange={e => setFormGasto(f => ({ ...f, fecha: e.target.value }))} style={{
+              <DateInput value={formGasto.fecha} onChange={iso => setFormGasto(f => ({ ...f, fecha: iso }))} isDark={isDark} style={{
                 padding: '9px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
                 fontFamily: 'inherit', width: '100%',
                 background: C.inputBg, color: C.text,
