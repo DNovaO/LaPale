@@ -97,8 +97,12 @@ function PieChart({ data, isDark }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         {segments.map((s, i) => (
-          <path key={i} d={s.path} fill={s.color} stroke={isDark ? '#0a1929' : '#fff'} strokeWidth="2"
-            style={{ transition: 'opacity .3s' }}/>
+          s.pct >= 0.9999 ? (
+            <circle key={i} cx={cx} cy={cy} r={radius} fill={s.color} stroke={isDark ? '#0a1929' : '#fff'} strokeWidth="2"/>
+          ) : (
+            <path key={i} d={s.path} fill={s.color} stroke={isDark ? '#0a1929' : '#fff'} strokeWidth="2"
+              style={{ transition: 'opacity .3s' }}/>
+          )
         ))}
       </svg>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
