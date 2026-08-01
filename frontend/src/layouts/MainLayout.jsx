@@ -80,11 +80,11 @@ const IcMoon = () => (
 )
 
 const NAV_ITEMS = [
-  { to: '/dashboard',   label: 'Dashboard',   icon: IcDashboard,  roles: ['administrador', 'cajero'] },
-  { to: '/pos',         label: 'Punto de Venta', icon: IcPOS,      roles: ['administrador', 'vendedor'] },
+  { to: '/dashboard',   label: 'Dashboard',   icon: IcDashboard,  roles: ['administrador', 'cajero', 'supervisor'] },
+  { to: '/pos',         label: 'Punto de Venta', icon: IcPOS,      roles: ['administrador', 'vendedor', 'supervisor'] },
   { to: '/cobro',       label: 'Cobro',        icon: IcCash,       roles: ['cajero'] },
-  { to: '/inventario',  label: 'Inventario',  icon: IcInventario, roles: ['administrador'] },
-  { to: '/ventas',      label: 'Ventas',      icon: IcVentas,     roles: ['administrador', 'cajero'] },
+  { to: '/inventario',  label: 'Inventario',  icon: IcInventario, roles: ['administrador', 'supervisor'] },
+  { to: '/ventas',      label: 'Ventas',      icon: IcVentas,     roles: ['administrador', 'cajero', 'supervisor'] },
   { to: '/finanzas',    label: 'Finanzas',    icon: IcFinanzas,   roles: ['administrador', 'cajero'] },
   { to: '/usuarios',    label: 'Usuarios',    icon: IcUsuarios,   roles: ['administrador'] },
   { to: '/bitacora',    label: 'Bitácora',    icon: IcBitacora,   roles: ['administrador'] },

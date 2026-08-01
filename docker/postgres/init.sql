@@ -237,7 +237,15 @@ INSERT INTO roles (id, nombre, permisos)
 VALUES (
     'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22',
     'vendedor',
-    '{"puede_cortesia":false,"ver_reportes":false,"gestionar_inventario":false,"gestionar_usuarios":false,"registrar_gastos":false,"cerrar_caja":false}'::jsonb
+    '{"puede_cortesia":true,"ver_reportes":false,"gestionar_inventario":false,"gestionar_usuarios":false,"registrar_gastos":false,"cerrar_caja":false}'::jsonb
+)
+ON CONFLICT (nombre) DO NOTHING;
+
+INSERT INTO roles (id, nombre, permisos)
+VALUES (
+    'f0eebc99-9c0b-4ef8-bb6d-6bb9bd380a66',
+    'supervisor',
+    '{"puede_cortesia":true,"ver_reportes":true,"gestionar_inventario":true,"gestionar_usuarios":false,"registrar_gastos":false,"cerrar_caja":false}'::jsonb
 )
 ON CONFLICT (nombre) DO NOTHING;
 

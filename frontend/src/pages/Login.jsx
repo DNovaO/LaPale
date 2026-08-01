@@ -86,6 +86,7 @@ export default function Login() {
       login(data)
       const dest = data.user?.rol === 'vendedor' ? '/pos'
         : data.user?.rol === 'cajero' ? '/cobro'
+        : data.user?.rol === 'supervisor' ? '/dashboard'
         : '/dashboard'
       navigate(dest, { replace: true })
     } catch (err) {

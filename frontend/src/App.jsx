@@ -32,11 +32,11 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/dashboard" element={<AppLayout roles={CAJERO}><Dashboard /></AppLayout>} />
-          <Route path="/inventario" element={<AppLayout roles={ADMIN}><Inventario /></AppLayout>} />
-          <Route path="/pos" element={<AppLayout roles={VENDEDOR}><POS /></AppLayout>} />
+          <Route path="/dashboard" element={<AppLayout roles={['administrador', 'cajero', 'supervisor']}><Dashboard /></AppLayout>} />
+          <Route path="/inventario" element={<AppLayout roles={['administrador', 'supervisor']}><Inventario /></AppLayout>} />
+          <Route path="/pos" element={<AppLayout roles={['administrador', 'vendedor', 'supervisor']}><POS /></AppLayout>} />
           <Route path="/cobro" element={<AppLayout roles={CAJERO}><Cobro /></AppLayout>} />
-          <Route path="/ventas" element={<AppLayout roles={CAJERO}><Ventas /></AppLayout>} />
+          <Route path="/ventas" element={<AppLayout roles={['administrador', 'cajero', 'supervisor']}><Ventas /></AppLayout>} />
           <Route path="/finanzas" element={<AppLayout roles={CAJERO}><Finanzas /></AppLayout>} />
           <Route path="/usuarios" element={<AppLayout roles={ADMIN}><Usuarios /></AppLayout>} />
           <Route path="/bitacora" element={<AppLayout roles={ADMIN}><Bitacora /></AppLayout>} />

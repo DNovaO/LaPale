@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"paleteria-system/internal/cortesias"
 )
@@ -59,8 +58,7 @@ func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest
 		return nil, ErrDetalleVacio
 	}
 
-	esFinde := time.Now().Weekday() == time.Friday || time.Now().Weekday() == time.Saturday || time.Now().Weekday() == time.Sunday
-	enviarACaja := req.Abierta || (rolNombre == "vendedor" && esFinde)
+	enviarACaja := req.Abierta
 
 	if !enviarACaja && !metodosValidos[req.Pago.Metodo] {
 		return nil, ErrMetodoPagoInvalido

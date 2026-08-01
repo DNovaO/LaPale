@@ -12,7 +12,7 @@ VALUES (
     'administrador',
     '{"puede_cortesia":true,"ver_reportes":true,"gestionar_inventario":true,"gestionar_usuarios":true,"registrar_gastos":true,"cerrar_caja":true}'::jsonb
 )
-ON CONFLICT (nombre) DO NOTHING;
+ON CONFLICT (nombre) DO UPDATE SET permisos = EXCLUDED.permisos;
 
 INSERT INTO roles (
     nombre,
@@ -20,7 +20,17 @@ INSERT INTO roles (
 )
 VALUES (
     'vendedor',
-    '{"puede_cortesia":false,"ver_reportes":false,"gestionar_inventario":false,"gestionar_usuarios":false,"registrar_gastos":false,"cerrar_caja":false}'::jsonb
+    '{"puede_cortesia":true,"ver_reportes":false,"gestionar_inventario":false,"gestionar_usuarios":false,"registrar_gastos":false,"cerrar_caja":false}'::jsonb
+)
+ON CONFLICT (nombre) DO UPDATE SET permisos = EXCLUDED.permisos;
+
+INSERT INTO roles (
+    nombre,
+    permisos
+)
+VALUES (
+    'supervisor',
+    '{"puede_cortesia":true,"ver_reportes":true,"gestionar_inventario":true,"gestionar_usuarios":false,"registrar_gastos":false,"cerrar_caja":false}'::jsonb
 )
 ON CONFLICT (nombre) DO NOTHING;
 
