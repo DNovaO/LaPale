@@ -28,6 +28,15 @@ function parsePresentaciones(raw) {
   return null
 }
 
+function orderKey(nombre) {
+  const n = nombre.toLowerCase()
+  if (n.includes('agua')) return 0
+  if (n.includes('temporada') || n.includes('light')) return 1
+  if (n.includes('leche')) return 2
+  if (n.includes('helado')) return 3
+  return 4
+}
+
 export default function POS() {
   const { token, user }   = useAuth()
   const { theme }         = useTheme()
@@ -70,7 +79,15 @@ export default function POS() {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(r => r.json())
-      .then(d => setProductos(d.data ?? []))
+      .then(d => {
+        const sorted = (d.data ?? []).sort((a, b) => {
+          const ka = orderKey(a.nombre)
+          const kb = orderKey(b.nombre)
+          if (ka !== kb) return ka - kb
+          return a.nombre.localeCompare(b.nombre)
+        })
+        setProductos(sorted)
+      })
       .catch(() => setError('Error al cargar productos'))
       .finally(() => setLoadingProds(false))
   }, [token])
