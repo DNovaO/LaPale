@@ -35,6 +35,28 @@ const IcEdit = () => (
     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
   </svg>
 )
+const IcChevronLeft = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+)
+const IcChevronRight = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="9 18 15 12 9 6"/>
+  </svg>
+)
+const IcDoubleLeft = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="11 17 5 12 11 7"/>
+    <polyline points="18 17 12 12 18 7"/>
+  </svg>
+)
+const IcDoubleRight = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="13 17 19 12 13 7"/>
+    <polyline points="6 17 12 12 6 7"/>
+  </svg>
+)
 
 const fmt = n => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n || 0)
 const fmtDT = d => new Date(d).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -173,6 +195,17 @@ export default function Ventas() {
 
   const ventasPagina = ventasFiltradas.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const totalPages = Math.ceil(ventasFiltradas.length / PAGE_SIZE)
+
+  const getVisiblePages = () => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1)
+    const pages = []
+    if (page > 3) { pages.push(1); pages.push('...') }
+    for (let i = Math.max(1, page - 2); i <= Math.min(totalPages, page + 2); i++) {
+      pages.push(i)
+    }
+    if (page < totalPages - 2) { pages.push('...'); pages.push(totalPages) }
+    return pages
+  }
 
   const TABS = [
     { key: 'todas', label: 'Todas' },
@@ -363,15 +396,19 @@ export default function Ventas() {
         </div>
           {!loading && totalPages > 1 && (
             <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, borderTop: `1px solid ${C.border}` }}>
-              <button onClick={() => setPage(1)} disabled={page === 1} style={pageBtnStyle(C, page === 1)}>{'<<'}</button>
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={pageBtnStyle(C, page === 1)}>{'<'}</button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                <button key={p} onClick={() => setPage(p)} style={p === page ? { ...pageBtnStyle(C), background: '#B6CD38', color: '#0C0F14', fontWeight: 700, borderColor: '#B6CD38' } : pageBtnStyle(C)}>
-                  {p}
-                </button>
-              ))}
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={pageBtnStyle(C, page === totalPages)}>{'>'}</button>
-              <button onClick={() => setPage(totalPages)} disabled={page === totalPages} style={pageBtnStyle(C, page === totalPages)}>{'>>'}</button>
+              <button onClick={() => setPage(1)} disabled={page === 1} style={pageBtnStyle(C, page === 1)}><IcDoubleLeft /></button>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={pageBtnStyle(C, page === 1)}><IcChevronLeft /></button>
+              {getVisiblePages().map((p, i) =>
+                p === '...' ? (
+                  <span key={`dots-${i}`} style={{ padding: '4px 4px', color: C.subtext, fontSize: 12 }}>...</span>
+                ) : (
+                  <button key={p} onClick={() => setPage(p)} style={p === page ? { ...pageBtnStyle(C), background: '#B6CD38', color: '#0C0F14', fontWeight: 700, borderColor: '#B6CD38' } : pageBtnStyle(C)}>
+                    {p}
+                  </button>
+                )
+              )}
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={pageBtnStyle(C, page === totalPages)}><IcChevronRight /></button>
+              <button onClick={() => setPage(totalPages)} disabled={page === totalPages} style={pageBtnStyle(C, page === totalPages)}><IcDoubleRight /></button>
               <span style={{ fontSize: 11, color: C.subtext, marginLeft: 8 }}>Pág. {page} de {totalPages}</span>
             </div>
           )}
