@@ -68,7 +68,7 @@ function Modal({ open, onClose, title, children, isDark }) {
       padding: 16,
     }} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={{
-        width: '100%', maxWidth: 460,
+        width: '100%', maxWidth: 640,
         background: isDark ? '#0a1929' : 'white',
         border: `1px solid ${isDark ? 'rgba(35,122,170,0.2)' : 'rgba(29,84,125,0.15)'}`,
         borderRadius: 20,
@@ -129,7 +129,7 @@ function Input({ isDark, ...props }) {
 }
 
 // ── Inventario ───────────────────────────────────────────────
-const TIPOS_MOV = ['ENTRADA', 'AJUSTE_MANUAL', 'MERMA']
+const TIPOS_MOV = ['ENTRADA', 'SALIDA_MANUAL', 'AJUSTE_MANUAL', 'MERMA']
 
 export default function Inventario() {
   const { theme } = useTheme()
@@ -634,18 +634,18 @@ export default function Inventario() {
       {/* Modal — Crear/Editar producto */}
       <Modal open={modalProducto} onClose={() => setModalProducto(false)} title={editando ? 'Editar producto' : 'Nuevo producto'} isDark={isDark}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <Field label="Nombre *" isDark={isDark}>
-            <Input isDark={isDark} placeholder="Ej: Paleta de fresa" value={formP.nombre} onChange={e => setFormP(f => ({ ...f, nombre: e.target.value }))} />
-          </Field>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Field label="SKU (auto)" isDark={isDark}>
-              <Input isDark={isDark} placeholder="Se genera automaticamente" value={formP.sku} onChange={e => setFormP(f => ({ ...f, sku: e.target.value }))} disabled style={{ opacity: 0.6 }} />
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 12 }}>
+            <Field label="Nombre *" isDark={isDark}>
+              <Input isDark={isDark} placeholder="Ej: Paleta de fresa" value={formP.nombre} onChange={e => setFormP(f => ({ ...f, nombre: e.target.value }))} />
             </Field>
-            <Field label={`Precio${presentacionesList.length > 0 ? ' (opcional)' : ' *'}`} isDark={isDark}>
+            <Field label={`Precio${presentacionesList.length > 0 ? ' (opc.)' : ' *'}`} isDark={isDark}>
               <Input isDark={isDark} type="number" min="0" step="0.01" placeholder="0.00" value={formP.precio} onChange={e => setFormP(f => ({ ...f, precio: e.target.value }))} />
             </Field>
+            <Field label="SKU (auto)" isDark={isDark}>
+              <Input isDark={isDark} placeholder="Automático" value={formP.sku} onChange={e => setFormP(f => ({ ...f, sku: e.target.value }))} disabled style={{ opacity: 0.6 }} />
+            </Field>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
             <Field label="Tipo" isDark={isDark}>
               <select className="inv-select" value={formP.tipo} onChange={e => setFormP(f => ({ ...f, tipo: e.target.value }))} style={{
                 padding: '9px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
@@ -675,8 +675,6 @@ export default function Inventario() {
                 <option value="MILILITRO">Mililitro</option>
               </select>
             </Field>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {!editando && (
               <Field label="Stock inicial" isDark={isDark}>
                 <Input isDark={isDark} type="number" min="0" placeholder="0" value={formP.stock_inicial} onChange={e => setFormP(f => ({ ...f, stock_inicial: e.target.value }))} />
@@ -686,22 +684,23 @@ export default function Inventario() {
               <Input isDark={isDark} type="number" min="0" placeholder="5" value={formP.stock_minimo} onChange={e => setFormP(f => ({ ...f, stock_minimo: e.target.value }))} />
             </Field>
           </div>
-          <Field label="Descripción" isDark={isDark}>
-            <textarea
-              placeholder="Descripción opcional..."
-              value={formP.descripcion}
-              onChange={e => setFormP(f => ({ ...f, descripcion: e.target.value }))}
-              rows={2}
-              style={{
-                padding: '9px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
-                fontFamily: 'inherit', resize: 'vertical',
-                background: isDark ? 'rgba(255,255,255,0.04)' : '#f0f6f9',
-                color: isDark ? '#F1F6F6' : '#0C0F14',
-                border: `1.5px solid ${isDark ? 'rgba(35,122,170,0.3)' : 'rgba(29,84,125,0.2)'}`,
-              }}
-            />
-          </Field>
-          <Field label="Imagen" isDark={isDark}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Descripción" isDark={isDark}>
+              <textarea
+                placeholder="Descripción opcional..."
+                value={formP.descripcion}
+                onChange={e => setFormP(f => ({ ...f, descripcion: e.target.value }))}
+                rows={2}
+                style={{
+                  padding: '9px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
+                  fontFamily: 'inherit', resize: 'vertical',
+                  background: isDark ? 'rgba(255,255,255,0.04)' : '#f0f6f9',
+                  color: isDark ? '#F1F6F6' : '#0C0F14',
+                  border: `1.5px solid ${isDark ? 'rgba(35,122,170,0.3)' : 'rgba(29,84,125,0.2)'}`,
+                }}
+              />
+            </Field>
+            <Field label="Imagen" isDark={isDark}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <input
                 type="file"
@@ -734,6 +733,7 @@ export default function Inventario() {
               )}
             </div>
           </Field>
+          </div>
           <Field label="Presentaciones" isDark={isDark}>
             <span style={{ fontSize: 10, color: C.subtext, marginBottom: 2 }}>Ej: si tienes 100 L de agua y vendes 500ml, el consumo es 0.5</span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
