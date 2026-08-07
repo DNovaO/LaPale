@@ -192,6 +192,35 @@ export default function Inventario() {
     reader.readAsDataURL(file)
   }
 
+  const handleImagenPresentacion = (idx, file) => {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        const maxW = 300
+        if (img.width <= maxW) {
+          setPresentacionesList(prev => prev.map((p, i) => i === idx ? { ...p, imagen: reader.result } : p))
+          return
+        }
+        const scale = maxW / img.width
+        const canvas = document.createElement('canvas')
+        canvas.width = maxW
+        canvas.height = Math.round(img.height * scale)
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        const resized = canvas.toDataURL('image/jpeg', 0.75)
+        setPresentacionesList(prev => prev.map((p, i) => i === idx ? { ...p, imagen: resized } : p))
+      }
+      img.src = reader.result
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const limpiarImagenPresentacion = (idx) => {
+    setPresentacionesList(prev => prev.map((p, i) => i === idx ? { ...p, imagen: undefined } : p))
+  }
+
   const limpiarImagen = () => {
     setFormP(f => ({ ...f, imagen: '' }))
     setImagenPreview(null)
@@ -748,6 +777,24 @@ export default function Inventario() {
                       background: 'transparent', color: '#B6CD38', textAlign: 'right',
                     }}
                   />
+                  <input
+                    type="file"
+                    id={`pres-img-${i}`}
+                    accept="image/*"
+                    capture="environment"
+                    hidden
+                    onChange={e => { const f = e.target.files?.[0]; if (f) handleImagenPresentacion(i, f); e.target.value = '' }}
+                  />
+                  {pr.imagen ? (
+                    <>
+                      <img src={pr.imagen} alt="" style={{ width: 24, height: 24, borderRadius: 4, objectFit: 'cover', flexShrink: 0 }} />
+                      <button onClick={() => limpiarImagenPresentacion(i)} style={{ width: 16, height: 16, borderRadius: 3, border: 'none', cursor: 'pointer', background: 'rgba(231,45,139,0.12)', color: '#E72D8B', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0, fontSize: 8 }}>✕</button>
+                    </>
+                  ) : (
+                    <label htmlFor={`pres-img-${i}`} style={{ width: 24, height: 24, borderRadius: 6, background: isDark ? 'rgba(35,122,170,0.10)' : 'rgba(29,84,125,0.06)', color: C.subtext, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, marginLeft: 'auto' }}>
+                      <IcCamera />
+                    </label>
+                  )}
                   <button onClick={() => setPresentacionesList(prev => prev.filter((_, idx) => idx !== i))}
                     style={{
                       width: 24, height: 24, borderRadius: 6, border: 'none', cursor: 'pointer',

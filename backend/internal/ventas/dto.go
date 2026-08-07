@@ -23,6 +23,10 @@ type CancelarVentaRequest struct {
 	Motivo string `json:"motivo"`
 }
 
+type UpdateMetodoPagoRequest struct {
+	Metodo string `json:"metodo"`
+}
+
 type FiltrosVenta struct {
 	SucursalID string
 	VendedorID string
@@ -30,4 +34,5 @@ type FiltrosVenta struct {
 	Tipo       string
 	Fecha      string // YYYY-MM-DD
 	Limite     int
+	Pagina     int
 }

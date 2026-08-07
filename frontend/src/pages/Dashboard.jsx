@@ -283,7 +283,7 @@ export default function Dashboard() {
       const [res, stock, v, tp, prods] = await Promise.all([
         finanzasService.getResumenDia(hoy).catch(() => null),
         inventarioService.getBajoStock().catch(() => []),
-        ventasService.getVentas({ estado: 'CERRADA', limite: 8, fecha: hoy }).catch(() => []),
+        ventasService.getVentas({ estado: 'CERRADA', limite: 500, fecha: hoy }).catch(() => []),
         ventasService.getTopProductos(hoy, 5).catch(() => []),
         inventarioService.getProductos(false).catch(() => []),
       ])
@@ -403,7 +403,7 @@ export default function Dashboard() {
           <div className="fade-in" style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden', boxShadow: isDark ? '0 4px 20px -4px rgba(0,0,0,0.4)' : '0 4px 16px -4px rgba(29,84,125,0.08)' }}>
             <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: C.text }}>Ventas recientes</h2>
-              <span style={{ fontSize: 12, color: C.subtext }}>{ventas.length} hoy</span>
+              <span style={{ fontSize: 12, color: C.subtext }}>{Math.min(ventas.length, 8)} hoy</span>
             </div>
             <div style={{ padding: '8px 0' }}>
               {loading ? Array(4).fill(0).map((_, i) => (
@@ -416,7 +416,7 @@ export default function Dashboard() {
                 </div>
               )) : ventas.length === 0 ? (
                 <div style={{ padding: '32px 20px', textAlign: 'center', color: C.subtext, fontSize: 13 }}>Sin ventas registradas hoy</div>
-              ) : ventas.map((v, i) => (
+              ) : ventas.slice(0, 8).map((v, i) => (
                 <div key={v.id} style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: i < ventas.length - 1 ? `1px solid ${C.border}` : 'none', transition: 'background .15s' }}
                   onMouseEnter={e => e.currentTarget.style.background = isDark ? 'rgba(35,122,170,0.06)' : 'rgba(29,84,125,0.04)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>

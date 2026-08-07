@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
+import QRCode from 'qrcode'
+import { jsPDF } from 'jspdf'
 
 const API = '/api'
 
@@ -42,23 +44,22 @@ export default function POS() {
   const { theme }         = useTheme()
   const isDark            = theme === 'dark'
   const searchRef         = useRef(null)
+  const [isTouch] = useState(() => typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
 
   const [productos,    setProductos]    = useState([])
   const [busqueda,     setBusqueda]     = useState('')
-  const [ticket,       setTicket]       = useState([])   // [{producto, cantidad, presentacion?, esCortesia}]
+  const [ticket,       setTicket]       = useState([])
   const [metodo,       setMetodo]       = useState('EFECTIVO')
   const [montoRecibido,setMontoRecibido]= useState('')
   const [loading,      setLoading]      = useState(false)
   const [loadingProds, setLoadingProds] = useState(true)
   const [ventaExitosa, setVentaExitosa] = useState(null)
   const [error,        setError]        = useState('')
-  const [presentPanel, setPresentPanel] = useState(null) // producto con presentaciones abierto
+  const [presentPanel, setPresentPanel] = useState(null)
   const [previewCortesia, setPreviewCortesia] = useState(null)
   const [forzarEnvio, setForzarEnvio] = useState(false)
-  const [isTouch] = useState(() => typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
 
-  const esFinde = [5, 6, 0].includes(new Date().getDay())
-  const enviarACaja = forzarEnvio || (esFinde && user?.rol === 'vendedor')
+  const enviarACaja = forzarEnvio
 
   const C = {
     bg:       isDark ? '#0C0F14' : '#F1F6F6',
@@ -80,13 +81,34 @@ export default function POS() {
     })
       .then(r => r.json())
       .then(d => {
-        const sorted = (d.data ?? []).sort((a, b) => {
-          const ka = orderKey(a.nombre)
-          const kb = orderKey(b.nombre)
-          if (ka !== kb) return ka - kb
-          return a.nombre.localeCompare(b.nombre)
+        const sorted = (d.data ?? [])
+        const expanded = []
+        sorted.forEach(p => {
+          const pres = parsePresentaciones(p.presentaciones)
+          const esPaleta = p.nombre.toLowerCase().includes('paleta')
+          if (pres && esPaleta) {
+            pres.forEach(pr => {
+              expanded.push({
+                ...p,
+                _virtual: true,
+                _nombre: `${p.nombre} de ${pr.etiqueta.toLowerCase()}`,
+                _precio: pr.precio || p.precio,
+                _presentacion: pr,
+                _color: pr.etiqueta.toLowerCase().charCodeAt(0) * 13 % 360,
+                imagen: pr.imagen || null,
+              })
+            })
+          } else {
+            expanded.push(p)
+          }
         })
-        setProductos(sorted)
+        expanded.sort((a, b) => {
+          const ka = orderKey(a._nombre || a.nombre)
+          const kb = orderKey(b._nombre || b.nombre)
+          if (ka !== kb) return ka - kb
+          return (a._nombre || a.nombre).localeCompare(b._nombre || b.nombre)
+        })
+        setProductos(expanded)
       })
       .catch(() => setError('Error al cargar productos'))
       .finally(() => setLoadingProds(false))
@@ -101,13 +123,23 @@ export default function POS() {
     if (producto.stock_actual <= 0) return
     const enTicket = ticket.filter(i => i.producto.id === producto.id).reduce((s, i) => s + i.cantidad, 0)
     if (enTicket >= producto.stock_actual) return
-    const pres = parsePresentaciones(producto.presentaciones)
-    if (pres) {
-      setPresentPanel({ producto, pres })
+    if (producto._virtual) {
+      agregarAlTicket(producto, 1, producto._presentacion)
       return
     }
+    const pres = parsePresentaciones(producto.presentaciones)
+    if (pres) { setPresentPanel({ producto, pres }); return }
     agregarAlTicket(producto, 1, null)
   }
+
+  useEffect(() => {
+    if (presentPanel) {
+      setTimeout(() => {
+        const el = document.querySelector('[data-pres-focus]')
+        el?.focus()
+      }, 50)
+    }
+  }, [presentPanel])
 
   const agregarAlTicket = (producto, cantidad, presentacion) => {
     setTicket(prev => {
@@ -166,13 +198,13 @@ export default function POS() {
     if (!isTouch) searchRef.current?.focus()
   }
 
-  const subtotal  = ticket.reduce((s, i) => {
+  const subtotal = ticket.reduce((s, i) => {
     if (i.esCortesia) return s
     const precio = i.presentacion?.precio || i.producto.precio
     return s + precio * i.cantidad
   }, 0)
-  const total     = subtotal
-  const cambio    = metodo === 'EFECTIVO' && montoRecibido
+  const total  = subtotal
+  const cambio = metodo === 'EFECTIVO' && montoRecibido
     ? Math.max(0, parseFloat(montoRecibido) - total)
     : 0
 
@@ -188,9 +220,7 @@ export default function POS() {
           headers: { Authorization: `Bearer ${token}` }
         })
         const d = await res.json()
-        if (!cancelled) {
-          setPreviewCortesia(d?.data ?? null)
-        }
+        if (!cancelled) setPreviewCortesia(d?.data ?? null)
       } catch { if (!cancelled) setPreviewCortesia(null) }
     }, 300)
     return () => { cancelled = true; clearTimeout(timer) }
@@ -294,43 +324,18 @@ export default function POS() {
 
       <div id="pos-container" style={{ display: 'flex', gap: 20, height: 'calc(100vh - 112px)', fontFamily: "'Inter', sans-serif" }}>
 
-        {/* Panel izquierdo: Catálogo */}
-        <div style={{
-          flex: 1, display: 'flex', flexDirection: 'column',
-          background: C.surface, borderRadius: 16,
-          border: `1px solid ${C.border}`, overflow: 'hidden', position: 'relative',
-        }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: C.surface, borderRadius: 16, border: `1px solid ${C.border}`, overflow: 'hidden', position: 'relative' }}>
           <div style={{ padding: '16px 16px 12px', borderBottom: `1px solid ${C.border}` }}>
             <div style={{ position: 'relative' }}>
-              <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: C.subtext, pointerEvents: 'none' }}>
-                <IcSearch />
-              </span>
-              <input
-                ref={searchRef}
-                autoFocus={!isTouch}                value={busqueda}
-                onChange={e => setBusqueda(e.target.value)}
-                placeholder="Buscar producto o SKU..."
-                style={{
-                  width: '100%', padding: '10px 12px 10px 38px',
-                  borderRadius: 10, border: `1px solid ${C.border}`,
-                  background: C.inputBg, color: C.text,
-                  fontSize: 13, outline: 'none', fontFamily: 'inherit',
-                }}
-              />
+              <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: C.subtext, pointerEvents: 'none' }}><IcSearch /></span>
+              <input ref={searchRef} autoFocus={!isTouch} value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar producto o SKU..."
+                style={{ width: '100%', padding: '10px 12px 10px 38px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.inputBg, color: C.text, fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
             </div>
             {user?.rol === 'administrador' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                <button onClick={() => setForzarEnvio(f => !f)} style={{
-                  padding: '4px 10px', borderRadius: 6, border: `1px solid ${forzarEnvio ? '#f59e0b' : C.border}`,
-                  background: forzarEnvio ? 'rgba(245,158,11,0.12)' : 'transparent',
-                  color: forzarEnvio ? '#f59e0b' : C.subtext, fontSize: 11, cursor: 'pointer',
-                  fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4, transition: 'all .15s',
-                }}>
-                  {forzarEnvio ? 'Solo envio (ON)' : 'Solo envio (OFF)'}
+                <button disabled onClick={() => setForzarEnvio(f => !f)} style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${forzarEnvio ? '#f59e0b' : C.border}`, background: forzarEnvio ? 'rgba(245,158,11,0.12)' : 'transparent', color: forzarEnvio ? '#f59e0b' : C.subtext, fontSize: 11, cursor: 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4, transition: 'all .15s', opacity: 0.5 }}>
+                  Envio a caja (deshabilitado)
                 </button>
-                <span style={{ fontSize: 10, color: C.muted }}>
-                  {forzarEnvio ? 'Ventas se envian a caja sin cobrar' : esFinde ? 'Hoy es finde — envio a caja activo' : 'Hoy es dia habil — cobro directo activo'}
-                </span>
               </div>
             )}
           </div>
@@ -339,51 +344,28 @@ export default function POS() {
             {loadingProds ? (
               <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', paddingTop: 40 }}>Cargando productos...</div>
             ) : productosFiltrados.length === 0 ? (
-              <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', paddingTop: 40 }}>
-                {busqueda ? 'Sin resultados para tu búsqueda' : 'No hay productos disponibles'}
-              </div>
+              <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', paddingTop: 40 }}>{busqueda ? 'Sin resultados para tu búsqueda' : 'No hay productos disponibles'}</div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
                 {productosFiltrados.map(p => (
-                  <ProductoCard
-                    key={p.id}
-                    producto={p}
-                    isDark={isDark}
-                    C={C}
-                    enTicket={ticket.filter(i => i.producto.id === p.id).reduce((s, i) => s + i.cantidad, 0)}
-                    onClick={() => handleClickProducto(p)}
-                  />
+                  <ProductoCard key={p._virtual ? `${p.id}_${p._presentacion.etiqueta}` : p.id} producto={p} isDark={isDark} C={C} enTicket={p._virtual ? ticket.filter(i => i.producto.id === p.id && i.presentacion?.etiqueta === p._presentacion?.etiqueta).reduce((s, i) => s + i.cantidad, 0) : ticket.filter(i => i.producto.id === p.id).reduce((s, i) => s + i.cantidad, 0)} onClick={() => handleClickProducto(p)} />
                 ))}
               </div>
             )}
           </div>
 
-          {/* Popover de presentaciones */}
           {presentPanel && (
-            <div className="fade-in" onClick={() => setPresentPanel(null)} style={{
-              position: 'absolute', inset: 0, zIndex: 20,
-              background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <div className="pop-in" onClick={e => e.stopPropagation()} style={{
-                background: C.surface, borderRadius: 16, padding: '20px 24px',
-                border: `1px solid ${C.border}`, minWidth: 260, maxWidth: 340,
-                boxShadow: isDark ? '0 20px 60px -8px rgba(0,0,0,0.8)' : '0 20px 60px -8px rgba(29,84,125,0.2)',
-              }}>
+            <div className="fade-in" onClick={() => setPresentPanel(null)} style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className="pop-in" onClick={e => e.stopPropagation()} style={{ background: C.surface, borderRadius: 16, padding: '20px 24px', border: `1px solid ${C.border}`, minWidth: 300, maxWidth: 420, boxShadow: isDark ? '0 20px 60px -8px rgba(0,0,0,0.8)' : '0 20px 60px -8px rgba(29,84,125,0.2)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                   <span style={{ fontWeight: 600, fontSize: 14, color: C.text }}>{presentPanel.producto.nombre}</span>
                   <button onClick={() => setPresentPanel(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.subtext, padding: 4 }}><IcX /></button>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {presentPanel.pres.map((pr, i) => (
-                    <button key={i} onClick={() => agregarAlTicket(presentPanel.producto, 1, pr)} style={{
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      padding: '10px 14px', borderRadius: 10, border: `1px solid ${C.border}`,
-                      background: C.inputBg, cursor: 'pointer', fontFamily: 'inherit', width: '100%',
-                      transition: 'all .15s', textAlign: 'left',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = C.lime; e.currentTarget.style.background = isDark ? 'rgba(182,205,56,0.08)' : 'rgba(0,117,63,0.05)' }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = C.inputBg }}
-                    >
+                    <button key={i} {...(i === 0 ? { 'data-pres-focus': true } : {})} onClick={() => agregarAlTicket(presentPanel.producto, 1, pr)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.inputBg, cursor: 'pointer', fontFamily: 'inherit', width: '100%', transition: 'all .15s', textAlign: 'left', outline: 'none' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = C.lime; e.currentTarget.style.background = isDark ? 'rgba(182,205,56,0.08)' : 'rgba(0,117,63,0.05)' }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = C.inputBg }}>
                       <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{pr.etiqueta}</span>
                       <span style={{ fontSize: 14, fontWeight: 700, color: C.lime }}>{fmt(pr.precio || presentPanel.producto.precio)}</span>
                     </button>
@@ -394,78 +376,39 @@ export default function POS() {
           )}
         </div>
 
-        {/* Panel derecho: Ticket */}
-        <div style={{
-          width: 360, display: 'flex', flexDirection: 'column',
-          background: C.surface, borderRadius: 16,
-          border: `1px solid ${C.border}`, overflow: 'hidden',
-          flexShrink: 0,
-        }}>
-          <div style={{
-            padding: '16px 20px', borderBottom: `1px solid ${C.border}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          }}>
+        <div style={{ width: 360, display: 'flex', flexDirection: 'column', background: C.surface, borderRadius: 16, border: `1px solid ${C.border}`, overflow: 'hidden', flexShrink: 0 }}>
+          <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <IcReceipt />
               <span style={{ fontWeight: 600, fontSize: 14, color: C.text }}>Ticket</span>
-              {ticket.length > 0 && (
-                <span style={{ background: C.lime, color: '#0C0F14', borderRadius: 20, fontSize: 11, fontWeight: 700, padding: '1px 7px' }}>
-                  {ticket.reduce((s, i) => s + i.cantidad, 0)}
-                </span>
-              )}
+              {ticket.length > 0 && <span style={{ background: C.lime, color: '#0C0F14', borderRadius: 20, fontSize: 11, fontWeight: 700, padding: '1px 7px' }}>{ticket.reduce((s, i) => s + i.cantidad, 0)}</span>}
             </div>
-            {ticket.length > 0 && (
-              <button onClick={limpiarTicket} style={{ padding: '4px 10px', borderRadius: 8, border: 'none', background: 'rgba(231,45,139,0.08)', color: C.pink, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
-                Limpiar
-              </button>
-            )}
+            {ticket.length > 0 && <button onClick={limpiarTicket} style={{ padding: '4px 10px', borderRadius: 8, border: 'none', background: 'rgba(231,45,139,0.08)', color: C.pink, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Limpiar</button>}
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
             {ticket.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 10, color: C.muted }}>
-                <IcReceipt />
-                <span style={{ fontSize: 13 }}>Agrega productos al ticket</span>
+                <IcReceipt /><span style={{ fontSize: 13 }}>Agrega productos al ticket</span>
               </div>
             ) : (
               ticket.map((item, idx) => {
                 const precio = item.presentacion?.precio || item.producto.precio
                 return (
-                  <div key={idx} style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '10px 8px', borderBottom: `1px solid ${C.border}`,
-                    opacity: item.esCortesia ? 0.7 : 1,
-                  }}>
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 8px', borderBottom: `1px solid ${C.border}`, opacity: item.esCortesia ? 0.7 : 1 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: item.esCortesia ? C.pink : C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {item.producto.nombre}
-                      </p>
-                      {item.presentacion && (
-                        <p style={{ margin: 0, fontSize: 11, color: C.subtext }}>{item.presentacion.etiqueta}</p>
-                      )}
-                      <p style={{ margin: 0, fontSize: 12, color: item.esCortesia ? C.pink : C.subtext }}>
-                        {item.esCortesia ? 'Cortesia' : fmt(precio) + ' c/u'}
-                      </p>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: item.esCortesia ? C.pink : C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.producto.nombre}</p>
+                      {item.presentacion && <p style={{ margin: 0, fontSize: 11, color: C.subtext }}>{item.presentacion.etiqueta}</p>}
+                      <p style={{ margin: 0, fontSize: 12, color: item.esCortesia ? C.pink : C.subtext }}>{item.esCortesia ? 'Cortesia' : fmt(precio) + ' c/u'}</p>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                      {user?.rol === 'administrador' && (
-                        <button onClick={() => toggleCortesiaItem(idx)} title="Marcar como cortesia" style={{
-                          width: 24, height: 24, borderRadius: 6, border: 'none', cursor: 'pointer', padding: 0,
-                          background: item.esCortesia ? 'rgba(231,45,139,0.15)' : 'transparent',
-                          color: item.esCortesia ? C.pink : C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          transition: 'all .1s', fontSize: 12,
-                        }}><IcGift /></button>
-                      )}
+                      <button onClick={() => toggleCortesiaItem(idx)} style={{ width: 24, height: 24, borderRadius: 6, border: 'none', cursor: 'pointer', padding: 0, background: item.esCortesia ? 'rgba(231,45,139,0.15)' : 'transparent', color: item.esCortesia ? C.pink : C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .1s', fontSize: 12 }}><IcGift /></button>
                       <CantidadBtn onClick={() => cambiarCantidad(idx, -1)} C={C}><IcMinus /></CantidadBtn>
                       <span style={{ fontSize: 13, fontWeight: 600, color: C.text, minWidth: 20, textAlign: 'center' }}>{item.cantidad}</span>
-                      <CantidadBtn onClick={() => cambiarCantidad(idx, 1)}
-                        disabled={ticket.reduce((s, i) => i.producto.id === item.producto.id ? s + i.cantidad : s, 0) >= item.producto.stock_actual}
-                        C={C}><IcPlus /></CantidadBtn>
+                      <CantidadBtn onClick={() => cambiarCantidad(idx, 1)} disabled={ticket.reduce((s, i) => i.producto.id === item.producto.id ? s + i.cantidad : s, 0) >= item.producto.stock_actual} C={C}><IcPlus /></CantidadBtn>
                       <CantidadBtn onClick={() => quitarItem(idx)} C={C} danger><IcTrash /></CantidadBtn>
                     </div>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: item.esCortesia ? C.pink : C.lime, minWidth: 60, textAlign: 'right', flexShrink: 0 }}>
-                      {item.esCortesia ? '$0.00' : fmt(precio * item.cantidad)}
-                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: item.esCortesia ? C.pink : C.lime, minWidth: 60, textAlign: 'right', flexShrink: 0 }}>{item.esCortesia ? '$0.00' : fmt(precio * item.cantidad)}</span>
                   </div>
                 )
               })
@@ -479,62 +422,33 @@ export default function POS() {
             </div>
 
             {previewCortesia?.aplicable && (
-              <div style={{
-                background: 'rgba(231,45,139,0.08)', borderRadius: 10, padding: '10px 14px',
-                border: '1px solid rgba(231,45,139,0.2)', display: 'flex', alignItems: 'center', gap: 8,
-              }}>
+              <div style={{ background: 'rgba(231,45,139,0.08)', borderRadius: 10, padding: '10px 14px', border: '1px solid rgba(231,45,139,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ flexShrink: 0, color: C.pink }}><IcGift /></span>
                 <div style={{ lineHeight: 1.3 }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: C.pink }}>Cortesía incluida: </span>
-                  <span style={{ fontSize: 12, color: C.text }}>
-                    +{previewCortesia.cortesia.cantidad} {previewCortesia.cortesia.producto_nombre}
-                  </span>
+                  <span style={{ fontSize: 12, color: C.text }}>+{previewCortesia.cortesia.cantidad} {previewCortesia.cortesia.producto_nombre}</span>
                 </div>
               </div>
             )}
 
             {previewCortesia && !previewCortesia.aplicable && subtotal > 0 && (
-              <div style={{ fontSize: 11, color: C.muted, textAlign: 'center', padding: '4px 0' }}>
-                La compra no alcanza el monto minimo para cortesia
-              </div>
+              <div style={{ fontSize: 11, color: C.muted, textAlign: 'center', padding: '4px 0' }}>La compra no alcanza el monto minimo para cortesia</div>
             )}
 
             {!enviarACaja && (
               <div style={{ display: 'flex', gap: 6 }}>
-                {[
-                  { key: 'EFECTIVO', label: 'Efectivo', icon: <IcCash /> },
-                  { key: 'TARJETA', label: 'Tarjeta', icon: <IcCard /> },
-                  { key: 'TRANSFERENCIA', label: 'Transf.', icon: <IcTransfer /> },
-                ].map(m => (
-                  <button key={m.key} onClick={() => { setMetodo(m.key); setMontoRecibido('') }} style={{
-                    flex: 1, padding: '8px 4px', borderRadius: 10,
-                    border: `1px solid ${metodo === m.key ? C.lime : C.border}`,
-                    background: metodo === m.key ? (isDark ? 'rgba(182,205,56,0.12)' : 'rgba(0,117,63,0.08)') : 'transparent',
-                    color: metodo === m.key ? C.lime : C.subtext,
-                    fontSize: 11, fontWeight: 500, cursor: 'pointer',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                    fontFamily: 'inherit', transition: 'all .15s',
-                  }}>
-                    {m.icon}{m.label}
-                  </button>
+                {[{ key: 'EFECTIVO', label: 'Efectivo', icon: <IcCash /> }, { key: 'TARJETA', label: 'Tarjeta', icon: <IcCard /> }, { key: 'TRANSFERENCIA', label: 'Transf.', icon: <IcTransfer /> }].map(m => (
+                  <button key={m.key} onClick={() => { setMetodo(m.key); setMontoRecibido('') }} style={{ flex: 1, padding: '8px 4px', borderRadius: 10, border: `1px solid ${metodo === m.key ? C.lime : C.border}`, background: metodo === m.key ? (isDark ? 'rgba(182,205,56,0.12)' : 'rgba(0,117,63,0.08)') : 'transparent', color: metodo === m.key ? C.lime : C.subtext, fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, fontFamily: 'inherit', transition: 'all .15s' }}>{m.icon}{m.label}</button>
                 ))}
               </div>
             )}
 
             {!enviarACaja && metodo === 'EFECTIVO' && (
               <div>
-                <input type="number" value={montoRecibido} onChange={e => setMontoRecibido(e.target.value)}
-                  placeholder={`Monto recibido (min. ${fmt(total)})`}
-                  min={total}
-                  style={{
-                    width: '100%', padding: '9px 12px', borderRadius: 8,
-                    border: `1px solid ${montoRecibido && parseFloat(montoRecibido) < total ? C.pink : C.border}`,
-                    background: C.inputBg, color: C.text, fontSize: 13, outline: 'none', fontFamily: 'inherit',
-                  }}
-                />
+                <input type="number" value={montoRecibido} onChange={e => setMontoRecibido(e.target.value)} placeholder={`Monto recibido (min. ${fmt(total)})`} min={total}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: `1px solid ${montoRecibido && parseFloat(montoRecibido) < total ? C.pink : C.border}`, background: C.inputBg, color: C.text, fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
                 {montoRecibido && parseFloat(montoRecibido) >= total && (
-                  <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderRadius: 8,
-                    background: isDark ? 'rgba(182,205,56,0.08)' : 'rgba(0,117,63,0.06)' }}>
+                  <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderRadius: 8, background: isDark ? 'rgba(182,205,56,0.08)' : 'rgba(0,117,63,0.06)' }}>
                     <span style={{ fontSize: 12, color: C.subtext }}>Cambio</span>
                     <span style={{ fontSize: 13, fontWeight: 700, color: C.lime }}>{fmt(cambio)}</span>
                   </div>
@@ -548,15 +462,7 @@ export default function POS() {
               </div>
             )}
 
-            <button onClick={confirmarVenta} disabled={!puedeConfirmar || loading}
-              style={{
-                width: '100%', padding: '13px', borderRadius: 12, border: 'none',
-                background: puedeConfirmar && !loading ? 'linear-gradient(135deg, #B6CD38 0%, #00753F 100%)' : C.border,
-                color: puedeConfirmar && !loading ? '#0C0F14' : C.muted,
-                fontWeight: 700, fontSize: 15, cursor: puedeConfirmar && !loading ? 'pointer' : 'not-allowed',
-                fontFamily: 'inherit', transition: 'all .2s',
-                boxShadow: puedeConfirmar && !loading ? '0 4px 16px -4px rgba(0,117,63,0.4)' : 'none',
-              }}>
+            <button onClick={confirmarVenta} disabled={!puedeConfirmar || loading} style={{ width: '100%', padding: '13px', borderRadius: 12, border: 'none', background: puedeConfirmar && !loading ? 'linear-gradient(135deg, #B6CD38 0%, #00753F 100%)' : C.border, color: puedeConfirmar && !loading ? '#0C0F14' : C.muted, fontWeight: 700, fontSize: 15, cursor: puedeConfirmar && !loading ? 'pointer' : 'not-allowed', fontFamily: 'inherit', transition: 'all .2s', boxShadow: puedeConfirmar && !loading ? '0 4px 16px -4px rgba(0,117,63,0.4)' : 'none' }}>
               {loading ? 'Procesando...' : enviarACaja ? `Enviar a caja ${fmt(total)}` : `Cobrar ${fmt(total)}`}
             </button>
           </div>
@@ -568,57 +474,25 @@ export default function POS() {
 
 function ProductoCard({ producto, isDark, C, enTicket, onClick }) {
   const sinStock = producto.stock_actual <= 0
-  const tienePres = parsePresentaciones(producto.presentaciones)
-  const inicial = (producto.nombre || '?')[0].toUpperCase()
+  const tienePres = !producto._virtual && parsePresentaciones(producto.presentaciones)
+  const nombre = producto._virtual ? producto._nombre : producto.nombre
+  const precio = producto._virtual ? producto._precio : producto.precio
+  const colorHSL = producto._color != null ? producto._color : (producto.nombre?.charCodeAt(0) * 7 || 120)
+  const inicial = (nombre || '?')[0].toUpperCase()
   return (
-    <button onClick={onClick} disabled={sinStock} style={{
-      padding: 0, borderRadius: 14, border: `1px solid`,
-      borderColor: enTicket > 0 ? C.lime : C.border,
-      background: enTicket > 0
-        ? (isDark ? 'rgba(182,205,56,0.08)' : 'rgba(0,117,63,0.05)')
-        : (isDark ? 'rgba(35,122,170,0.05)' : 'rgba(29,84,125,0.02)'),
-      cursor: sinStock ? 'not-allowed' : 'pointer', opacity: sinStock ? 0.45 : 1,
-      textAlign: 'left', fontFamily: 'inherit', transition: 'all .15s',
-      position: 'relative', display: 'flex', flexDirection: 'column',
-      overflow: 'hidden',
-    }}
-    onMouseEnter={e => { if (!sinStock) e.currentTarget.style.borderColor = C.lime }}
-    onMouseLeave={e => { if (enTicket === 0) e.currentTarget.style.borderColor = C.border }}
-    >
-      {enTicket > 0 && (
-        <span style={{ position: 'absolute', top: 8, right: 8, zIndex: 1, background: C.lime, color: '#0C0F14', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>
-          {enTicket}
-        </span>
-      )}
-      <div style={{
-        width: '100%', height: 110, overflow: 'hidden',
-        background: producto.imagen
-          ? 'transparent'
-          : `hsl(${producto.nombre?.charCodeAt(0) * 7 || 120}, 30%, ${isDark ? '20%' : '90%'})`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        {producto.imagen ? (
-          <img src={producto.imagen} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        ) : (
-          <span style={{ fontSize: 40, fontWeight: 800, color: isDark ? 'rgba(182,205,56,0.5)' : 'rgba(0,117,63,0.3)' }}>{inicial}</span>
-        )}
+    <button onClick={onClick} disabled={sinStock} style={{ padding: 0, borderRadius: 14, border: `1px solid`, borderColor: enTicket > 0 ? C.lime : C.border, background: enTicket > 0 ? (isDark ? 'rgba(182,205,56,0.08)' : 'rgba(0,117,63,0.05)') : (isDark ? 'rgba(35,122,170,0.05)' : 'rgba(29,84,125,0.02)'), cursor: sinStock ? 'not-allowed' : 'pointer', opacity: sinStock ? 0.45 : 1, textAlign: 'left', fontFamily: 'inherit', transition: 'all .15s', position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+      onMouseEnter={e => { if (!sinStock) e.currentTarget.style.borderColor = C.lime }}
+      onMouseLeave={e => { if (enTicket === 0) e.currentTarget.style.borderColor = C.border }}>
+      {enTicket > 0 && <span style={{ position: 'absolute', top: 8, right: 8, zIndex: 1, background: C.lime, color: '#0C0F14', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>{enTicket}</span>}
+      <div style={{ width: '100%', height: 110, overflow: 'hidden', background: producto.imagen ? 'transparent' : `hsl(${colorHSL}, 30%, ${isDark ? '20%' : '90%'})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {producto.imagen ? <img src={producto.imagen} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: 40, fontWeight: 800, color: isDark ? 'rgba(182,205,56,0.5)' : 'rgba(0,117,63,0.3)' }}>{inicial}</span>}
       </div>
       <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: C.text, lineHeight: 1.3 }}>{producto.nombre}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.text, lineHeight: 1.3 }}>{nombre}</span>
         {producto.sku && <span style={{ fontSize: 10, color: C.muted }}>{producto.sku}</span>}
-        {tienePres ? (
-          <span style={{ fontSize: 12, fontWeight: 600, color: C.subtext, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <IcChevron /> {tienePres.length} presentaciones
-          </span>
-        ) : (
-          <span style={{ fontSize: 15, fontWeight: 700, color: C.lime, marginTop: 2 }}>{fmt(producto.precio)}</span>
-        )}
-        {(producto.medida && producto.medida !== 'UNIDAD' && !tienePres) && (
-          <span style={{ fontSize: 9, color: C.subtext, fontWeight: 500 }}>por {producto.medida.toLowerCase()}</span>
-        )}
-        <span style={{ fontSize: 10, color: producto.stock_actual <= (producto.stock_minimo || 5) ? '#E72D8B' : C.muted, marginTop: 'auto' }}>
-          {sinStock ? 'Sin stock' : `Stock: ${producto.stock_actual}`}
-        </span>
+        {tienePres ? <span style={{ fontSize: 12, fontWeight: 600, color: C.subtext, display: 'flex', alignItems: 'center', gap: 4 }}><IcChevron /> {tienePres.length} presentaciones</span> : <span style={{ fontSize: 15, fontWeight: 700, color: C.lime, marginTop: 2 }}>{fmt(precio)}</span>}
+        {(producto.medida && producto.medida !== 'UNIDAD' && !tienePres) && <span style={{ fontSize: 9, color: C.subtext, fontWeight: 500 }}>por {producto.medida.toLowerCase()}</span>}
+        <span style={{ fontSize: 10, color: producto.stock_actual <= (producto.stock_minimo || 5) ? '#E72D8B' : C.muted, marginTop: 'auto' }}>{sinStock ? 'Sin stock' : `Stock: ${producto.stock_actual}`}</span>
       </div>
     </button>
   )
@@ -626,16 +500,9 @@ function ProductoCard({ producto, isDark, C, enTicket, onClick }) {
 
 function CantidadBtn({ onClick, disabled, children, C, danger }) {
   return (
-    <button onClick={onClick} disabled={disabled} style={{
-      width: 24, height: 24, borderRadius: 6, border: `1px solid ${C.border}`,
-      background: 'transparent', cursor: disabled ? 'not-allowed' : 'pointer',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: danger ? '#E72D8B' : C.subtext,
-      opacity: disabled ? 0.4 : 1, padding: 0, transition: 'all .1s', fontFamily: 'inherit',
-    }}
-    onMouseEnter={e => { if (!disabled) e.currentTarget.style.background = danger ? 'rgba(231,45,139,0.1)' : C.inputBg }}
-    onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-    >
+    <button onClick={onClick} disabled={disabled} style={{ width: 24, height: 24, borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', cursor: disabled ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: danger ? '#E72D8B' : C.subtext, opacity: disabled ? 0.4 : 1, padding: 0, transition: 'all .1s', fontFamily: 'inherit' }}
+      onMouseEnter={e => { if (!disabled) e.currentTarget.style.background = danger ? 'rgba(231,45,139,0.1)' : C.inputBg }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
       {children}
     </button>
   )
@@ -644,12 +511,228 @@ function CantidadBtn({ onClick, disabled, children, C, danger }) {
 function TicketModal({ venta, C, onNuevaVenta, token }) {
   const [emailCliente, setEmailCliente] = useState('')
   const [enviandoCorreo, setEnviandoCorreo] = useState(false)
-  const [estadoEmail, setEstadoEmail] = useState(null) // 'ok' | 'error'
+  const [estadoEmail, setEstadoEmail] = useState(null)
   const [mensajeEmail, setMensajeEmail] = useState('')
+  const [qrDataURL, setQrDataURL] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const doc = new jsPDF()
+
+        const fecha = new Date().toLocaleDateString('es-MX')
+        const hora = new Date().toLocaleTimeString('es-MX', {
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+
+        const items = venta.detalle || []
+
+        const verde = [0, 117, 63]
+        const gris = [245, 245, 245]
+
+        let y = 0
+
+        // HEADER
+        doc.setFillColor(...verde)
+        doc.rect(0, 0, 210, 34, 'F')
+
+        doc.setTextColor(255)
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(22)
+        doc.text('LA PALE', 105, 16, { align: 'center' })
+
+        doc.setFontSize(11)
+        doc.setFont('helvetica', 'normal')
+        doc.text('Ticket de compra', 105, 24, { align: 'center' })
+
+        y = 48
+
+        // Ticket
+        doc.setTextColor(...verde)
+        doc.setFontSize(10)
+        doc.text('TICKET', 105, y, { align: 'center' })
+
+        y += 8
+
+        doc.setFontSize(24)
+        doc.setFont('helvetica', 'bold')
+        doc.text(`#${venta.ticket_numero}`, 105, y, { align: 'center' })
+
+        y += 12
+
+        // Caja información
+        doc.setFillColor(...gris)
+        doc.roundedRect(18, y, 174, 22, 3, 3, 'F')
+
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(9)
+        doc.setTextColor(120)
+        doc.text('Método de pago', 26, y + 8)
+
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(11)
+        doc.setTextColor(40)
+        doc.text(venta.metodo || 'EFECTIVO', 26, y + 16)
+
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(120)
+        doc.text(fecha, 145, y + 8)
+        doc.text(hora, 145, y + 16)
+
+        y += 34
+
+        // Encabezado tabla
+        doc.setFillColor(...verde)
+        doc.rect(18, y, 174, 9, 'F')
+
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(9)
+        doc.setTextColor(255)
+
+        doc.text('Producto', 22, y + 6)
+        doc.text('Cant', 120, y + 6, { align: 'center' })
+        doc.text('Precio', 150, y + 6, { align: 'right' })
+        doc.text('Subtotal', 188, y + 6, { align: 'right' })
+
+        y += 9
+
+        // Productos
+        items.forEach((item) => {
+
+          doc.setDrawColor(235)
+          doc.line(18, y, 192, y)
+
+          y += 7
+
+          doc.setFont('helvetica', 'normal')
+          doc.setFontSize(9)
+          doc.setTextColor(40)
+
+          doc.text(item.producto_nombre, 22, y)
+
+          doc.text(String(item.cantidad), 120, y, {
+            align: 'center'
+          })
+
+          doc.text(fmt(item.precio_unitario), 150, y, {
+            align: 'right'
+          })
+
+          doc.setFont('helvetica', 'bold')
+
+          doc.text(fmt(item.subtotal), 188, y, {
+            align: 'right'
+          })
+
+          y += 4
+        })
+
+        doc.setDrawColor(...verde)
+        doc.line(18, y + 2, 192, y + 2)
+
+        y += 16
+
+        // Total
+
+        doc.setFillColor(245,250,245)
+        doc.roundedRect(18, y-8, 174, 14, 3,3,'F')
+
+        doc.setFont('helvetica','bold')
+        doc.setFontSize(15)
+
+        doc.setTextColor(0)
+
+        doc.text('TOTAL',24,y)
+
+        doc.setTextColor(...verde)
+
+        doc.text(fmt(venta.total),188,y,{
+          align:'right'
+        })
+
+        y += 22
+
+        // Cambio
+
+        if(venta.cambio>0){
+
+            doc.setFontSize(10)
+            doc.setTextColor(100)
+
+            doc.setFont('helvetica','normal')
+
+            doc.text('Cambio',24,y)
+
+            doc.text(fmt(venta.cambio),188,y,{
+              align:'right'
+            })
+
+            y+=12
+        }
+
+        // Footer
+
+        doc.setDrawColor(220)
+        doc.line(25,y,185,y)
+
+        y+=10
+
+        doc.setTextColor(...verde)
+        doc.setFont('helvetica','bold')
+        doc.setFontSize(11)
+
+        doc.text('LA PALE',105,y,{
+          align:'center'
+        })
+
+        y+=6
+
+        doc.setFont('helvetica','normal')
+        doc.setTextColor(120)
+        doc.setFontSize(8)
+
+        doc.text('C. Ignacio Pérez 87 Norte',105,y,{
+          align:'center'
+        })
+
+        y+=4
+
+        doc.text('Centro, San Luis Potosí',105,y,{
+          align:'center'
+        })
+
+        y+=4
+
+        doc.text('Gracias por tu compra',105,y,{
+          align:'center'
+        })
+        const blob = doc.output('blob')
+        const formData = new FormData()
+        formData.append('pdf', blob, 'ticket.pdf')
+
+        const res = await fetch('/api/tickets/upload', {
+          method: 'POST',
+          body: formData,
+        })
+        const data = await res.json()
+        if (cancelled) return
+
+        const url = window.location.origin + data.data.url
+        const qr = await QRCode.toDataURL(url, { width: 160, margin: 1 })
+        if (!cancelled) setQrDataURL(qr)
+      } catch (e) {
+        console.warn('Error generando QR:', e)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [venta])
 
   const enviarTicketEmail = async () => {
     if (!emailCliente.trim()) return
-    setEnviandoCorreo(true); setEstadoEmail(null)
+    setEnviandoCorreo(true)
+    setEstadoEmail(null)
     try {
       const res = await fetch(`${API}/email/ticket`, {
         method: 'POST',
@@ -680,52 +763,27 @@ function TicketModal({ venta, C, onNuevaVenta, token }) {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100vh - 112px)' }}>
-      <div style={{
-        background: C.surface, borderRadius: 20, border: `1px solid ${C.border}`,
-        padding: '40px 36px', maxWidth: 440, width: '100%',
-        textAlign: 'center', fontFamily: "'Inter', sans-serif",
-      }}>
-        <div style={{ width: 64, height: 64, borderRadius: '50%', margin: '0 auto 20px',
-          background: 'linear-gradient(135deg, #B6CD38 0%, #00753F 100%)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 8px 24px -4px rgba(0,117,63,0.4)' }}>
+      <div style={{ background: C.surface, borderRadius: 20, border: `1px solid ${C.border}`, padding: '40px 36px', maxWidth: 440, width: '100%', textAlign: 'center', fontFamily: "'Inter', sans-serif", overflowY: 'auto', maxHeight: '90vh' }}>
+        <div style={{ width: 64, height: 64, borderRadius: '50%', margin: '0 auto 20px', background: 'linear-gradient(135deg, #B6CD38 0%, #00753F 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px -4px rgba(0,117,63,0.4)' }}>
           <IcCheck />
         </div>
-        <h2 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700, color: C.text }}>
-          {venta.enviadoACaja ? 'Cuenta enviada' : 'Venta confirmada'}
-        </h2>
-        <p style={{ margin: '0 0 20px', fontSize: 13, color: C.subtext }}>
-          Ticket #{venta.ticket_numero}
-          {venta.enviadoACaja && ' — Pendiente de cobro en caja'}
-        </p>
+        <h2 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700, color: C.text }}>{venta.enviadoACaja ? 'Cuenta enviada' : 'Venta confirmada'}</h2>
+        <p style={{ margin: '0 0 20px', fontSize: 13, color: C.subtext }}>Ticket #{venta.ticket_numero}{venta.enviadoACaja && ' — Pendiente de cobro en caja'}</p>
 
         {venta.cortesia_aplicada && (
-          <div style={{
-            background: 'rgba(231,45,139,0.08)', borderRadius: 12, padding: '12px 16px',
-            marginBottom: 16, border: `1px solid rgba(231,45,139,0.2)`,
-            display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left',
-          }}>
+          <div style={{ background: 'rgba(231,45,139,0.08)', borderRadius: 12, padding: '12px 16px', marginBottom: 16, border: `1px solid rgba(231,45,139,0.2)`, display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left' }}>
             <span style={{ flexShrink: 0 }}><IcGift /></span>
             <div>
               <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: C.pink }}>Cortesía aplicada</p>
-              <p style={{ margin: '2px 0 0', fontSize: 13, color: C.text }}>
-                +{venta.cortesia_aplicada.cantidad} {venta.cortesia_aplicada.producto_nombre}
-              </p>
-              <p style={{ margin: '2px 0 0', fontSize: 11, color: C.subtext }}>
-                Regla: {venta.cortesia_aplicada.regla_nombre}
-              </p>
+              <p style={{ margin: '2px 0 0', fontSize: 13, color: C.text }}>+{venta.cortesia_aplicada.cantidad} {venta.cortesia_aplicada.producto_nombre}</p>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: C.subtext }}>Regla: {venta.cortesia_aplicada.regla_nombre}</p>
             </div>
           </div>
         )}
 
         <div style={{ background: C.surface2, borderRadius: 12, padding: '16px 20px', marginBottom: 20, textAlign: 'left' }}>
           {venta.detalle?.map(d => (
-            <div key={d.id || d.producto_id} style={{
-              display: 'flex', justifyContent: 'space-between', fontSize: 13,
-              color: d.es_cortesia ? C.pink : C.text,
-              padding: '4px 0', borderBottom: `1px solid ${C.border}`,
-              opacity: d.es_cortesia ? 0.8 : 1,
-            }}>
+            <div key={d.id || d.producto_id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: d.es_cortesia ? C.pink : C.text, padding: '4px 0', borderBottom: `1px solid ${C.border}`, opacity: d.es_cortesia ? 0.8 : 1 }}>
               <span>{d.producto_nombre} x {d.cantidad}</span>
               <span style={{ fontWeight: 600 }}>{d.es_cortesia ? 'Gratis' : fmt(d.subtotal)}</span>
             </div>
@@ -742,43 +800,30 @@ function TicketModal({ venta, C, onNuevaVenta, token }) {
           )}
         </div>
 
+        {qrDataURL && (
+          <div style={{ marginBottom: 16, textAlign: 'center' }}>
+            <div style={{ display: 'inline-block', background: '#fff', borderRadius: 12, border: `2px solid ${C.border}`, padding: '16px 20px 12px', boxShadow: '0 2px 12px rgba(0,0,0,.06)' }}>
+              <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, color: '#00753F', letterSpacing: '.05em' }}>LA PALE</p>
+              <p style={{ margin: '0 0 2px', fontSize: 10, color: '#666' }}>Ticket #{venta.ticket_numero}</p>
+              <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: '#333' }}>{fmt(venta.total)}</p>
+              <img src={qrDataURL} alt="QR Ticket" style={{ width: 120, height: 120, display: 'block' }} />
+              <p style={{ margin: '8px 0 0', fontSize: 9, color: '#999' }}>Escanea para ver tu ticket</p>
+            </div>
+          </div>
+        )}
+
         <div style={{ marginBottom: 16, textAlign: 'left' }}>
-          <input
-            type="email"
-            value={emailCliente}
-            onChange={e => { setEmailCliente(e.target.value); setEstadoEmail(null) }}
-            placeholder="Correo del cliente para enviar ticket"
-            style={{
-              width: '100%', padding: '10px 12px', borderRadius: 10,
-              border: `1px solid ${C.border}`, background: C.inputBg, color: C.text,
-              fontSize: 13, outline: 'none', fontFamily: 'inherit', marginBottom: 8,
-            }}
-          />
+          <input type="email" value={emailCliente} onChange={e => { setEmailCliente(e.target.value); setEstadoEmail(null) }} placeholder="Correo del cliente (opcional)"
+            style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.inputBg, color: C.text, fontSize: 13, outline: 'none', fontFamily: 'inherit', marginBottom: 8 }} />
           <button onClick={enviarTicketEmail} disabled={enviandoCorreo || !emailCliente.trim()}
-            style={{
-              width: '100%', padding: '10px', borderRadius: 10, border: 'none',
-              background: enviandoCorreo || !emailCliente.trim() ? C.border : '#237AAA',
-              color: enviandoCorreo || !emailCliente.trim() ? C.muted : '#fff',
-              fontWeight: 600, fontSize: 13, cursor: enviandoCorreo || !emailCliente.trim() ? 'not-allowed' : 'pointer',
-              fontFamily: 'inherit', transition: 'all .15s',
-            }}>
+            style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: enviandoCorreo || !emailCliente.trim() ? C.border : '#237AAA', color: enviandoCorreo || !emailCliente.trim() ? C.muted : '#fff', fontWeight: 600, fontSize: 13, cursor: enviandoCorreo || !emailCliente.trim() ? 'not-allowed' : 'pointer', fontFamily: 'inherit', transition: 'all .15s' }}>
             {enviandoCorreo ? 'Enviando...' : 'Enviar ticket por correo'}
           </button>
-          {estadoEmail === 'ok' && (
-            <p style={{ margin: '6px 0 0', fontSize: 11, color: '#00753F', textAlign: 'center' }}>{mensajeEmail}</p>
-          )}
-          {estadoEmail === 'error' && (
-            <p style={{ margin: '6px 0 0', fontSize: 11, color: C.pink, textAlign: 'center' }}>{mensajeEmail}</p>
-          )}
+          {estadoEmail === 'ok' && <p style={{ margin: '6px 0 0', fontSize: 11, color: '#00753F', textAlign: 'center' }}>{mensajeEmail}</p>}
+          {estadoEmail === 'error' && <p style={{ margin: '6px 0 0', fontSize: 11, color: C.pink, textAlign: 'center' }}>{mensajeEmail}</p>}
         </div>
 
-        <button onClick={onNuevaVenta} style={{
-          width: '100%', padding: '13px', borderRadius: 12, border: 'none',
-          background: 'linear-gradient(135deg, #B6CD38 0%, #00753F 100%)',
-          color: '#0C0F14', fontWeight: 700, fontSize: 15,
-          cursor: 'pointer', fontFamily: 'inherit',
-          boxShadow: '0 4px 16px -4px rgba(0,117,63,0.4)',
-        }}>Nueva venta</button>
+        <button onClick={onNuevaVenta} style={{ width: '100%', padding: '13px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #B6CD38 0%, #00753F 100%)', color: '#0C0F14', fontWeight: 700, fontSize: 15, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 4px 16px -4px rgba(0,117,63,0.4)' }}>Nueva venta</button>
       </div>
     </div>
   )

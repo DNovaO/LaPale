@@ -27,6 +27,7 @@ func (h *Handler) GetAll(c *fiber.Ctx) error {
 		Tipo:       c.Query("tipo"),
 		Fecha:      c.Query("fecha"),
 		Limite:     c.QueryInt("limite", 50),
+		Pagina:     c.QueryInt("pagina", 1),
 	}
 	// Vendedor solo ve sus propias ventas
 	if claims.RolNombre == "vendedor" {
@@ -218,4 +219,35 @@ func (h *Handler) Cobrar(c *fiber.Ctx) error {
 	})
 
 	return response.Success(c, fiber.Map{"message": "venta cobrada", "venta": v})
+}
+
+func (h *Handler) UpdateMetodoPago(c *fiber.Ctx) error {
+	var req UpdateMetodoPagoRequest
+	if err := c.BodyParser(&req); err != nil {
+		return response.Error(c, 400, "body invalido")
+	}
+
+	if err := h.service.UpdateMetodoPago(c.Params("id"), req); err != nil {
+		if errors.Is(err, ErrVentaNoEncontrada) {
+			return response.Error(c, 404, "venta no encontrada")
+		}
+		if errors.Is(err, ErrMetodoPagoInvalido) {
+			return response.Error(c, 400, "metodo de pago invalido: EFECTIVO, TARJETA, TRANSFERENCIA")
+		}
+		return response.Error(c, 400, err.Error())
+	}
+
+	claims := auth.GetClaims(c)
+	h.bitacora.Log(bitacora.Registro{
+		UsuarioID:  claims.UserID,
+		SucursalID: claims.SucursalID,
+		Modulo:     bitacora.ModuloVentas,
+		Accion:     bitacora.AccionActualizar,
+		Entidad:    "pagos",
+		EntidadID:  c.Params("id"),
+		DatosNuevos: fiber.Map{"metodo": req.Metodo},
+		IPAddress:  c.IP(),
+	})
+
+	return response.Success(c, fiber.Map{"message": "metodo de pago actualizado"})
 }

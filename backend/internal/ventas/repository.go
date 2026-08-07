@@ -57,6 +57,12 @@ func (r *Repository) FindAll(filtros FiltrosVenta) ([]Venta, error) {
 	if filtros.Limite > 0 {
 		query += fmt.Sprintf(" LIMIT $%d", i)
 		args = append(args, filtros.Limite)
+		i++
+	}
+	if filtros.Pagina > 1 && filtros.Limite > 0 {
+		offset := (filtros.Pagina - 1) * filtros.Limite
+		query += fmt.Sprintf(" OFFSET $%d", i)
+		args = append(args, offset)
 	}
 
 	rows, err := r.Db.Query(context.Background(), query, args...)
@@ -169,6 +175,14 @@ func (r *Repository) findPagos(ventaID string) ([]Pago, error) {
 		pagos = append(pagos, p)
 	}
 	return pagos, nil
+}
+
+func (r *Repository) UpdateMetodoPago(ventaID, metodo string) error {
+	_, err := r.Db.Exec(context.Background(),
+		`UPDATE pagos SET metodo=$1, updated_at=NOW() WHERE venta_id=$2`,
+		metodo, ventaID,
+	)
+	return err
 }
 
 func (r *Repository) InsertVenta(ctx context.Context, tx pgx.Tx, v *Venta) error {

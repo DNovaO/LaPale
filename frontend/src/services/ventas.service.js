@@ -18,4 +18,8 @@ export const ventasService = {
     const { data } = await client.get(`/ventas/top-productos?fecha=${fecha}&limite=${limite}`)
     return data.data || []
   },
+  updateMetodoPago: async (id, metodo) => {
+    const { data } = await client.patch(`/ventas/${id}/metodo-pago`, { metodo })
+    return data
+  },
 }

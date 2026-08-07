@@ -29,9 +29,16 @@ const IcReceipt = () => (
     <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/>
   </svg>
 )
+const IcEdit = () => (
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  </svg>
+)
 
 const fmt = n => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n || 0)
 const fmtDT = d => new Date(d).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+const PAGE_SIZE = 20
 
 function Modal({ open, onClose, title, children, isDark }) {
   if (!open) return null
@@ -76,9 +83,10 @@ export default function Ventas() {
   const { user } = useAuth()
   const isDark = theme === 'dark'
 
-  const [ventas, setVentas]     = useState([])
-  const [loading, setLoading]   = useState(true)
-  const [search, setSearch]     = useState('')
+  const [ventas, setVentas]       = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [page, setPage]           = useState(1)
+  const [search, setSearch]       = useState('')
   const [filtroEstado, setFiltroEstado] = useState('todas')
 
   const [modalVenta, setModalVenta]   = useState(null)
@@ -87,6 +95,7 @@ export default function Ventas() {
   const [motivoCancelar, setMotivoCancelar] = useState('')
   const [cancelling, setCancelling]   = useState(false)
   const [error, setError] = useState('')
+  const [editMetodo, setEditMetodo] = useState(null) // { id, metodo, ticket }
 
   const C = {
     text:    isDark ? '#F1F6F6' : '#0C0F14',
@@ -99,16 +108,18 @@ export default function Ventas() {
   const fetchVentas = useCallback(async () => {
     setLoading(true)
     try {
-      const params = {}
+      const params = { limite: 500 }
       if (filtroEstado !== 'todas') params.estado = filtroEstado
       const data = await ventasService.getVentas(params)
       setVentas(data || [])
+      setPage(1)
     } finally {
       setLoading(false)
     }
   }, [filtroEstado])
 
   useEffect(() => { fetchVentas() }, [fetchVentas])
+  useEffect(() => { setPage(1) }, [search])
 
   const verDetalle = async (venta) => {
     setModalVenta(venta)
@@ -125,6 +136,16 @@ export default function Ventas() {
     setModalCancelar(venta)
     setMotivoCancelar('')
     setError('')
+  }
+
+  const handleUpdateMetodo = async (metodo) => {
+    if (!editMetodo) return
+    const venta = editMetodo
+    setEditMetodo(null)
+    try {
+      await ventasService.updateMetodoPago(venta.id, metodo)
+      setVentas(prev => prev.map(v => v.id === venta.id ? { ...v, metodo } : v))
+    } catch {}
   }
 
   const handleCancelar = async () => {
@@ -150,6 +171,9 @@ export default function Ventas() {
       v.tipo?.toLowerCase().includes(s)
   })
 
+  const ventasPagina = ventasFiltradas.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const totalPages = Math.ceil(ventasFiltradas.length / PAGE_SIZE)
+
   const TABS = [
     { key: 'todas', label: 'Todas' },
     { key: 'CERRADA', label: 'Cerradas' },
@@ -161,6 +185,12 @@ export default function Ventas() {
     if (estado === 'CANCELADA') return { bg: 'rgba(231,45,139,0.12)', color: '#E72D8B' }
     return { bg: 'rgba(138,106,74,0.12)', color: '#8A6A4A' }
   }
+
+  const pageBtnStyle = (c, disabled = false) => ({
+    padding: '4px 10px', borderRadius: 6, border: `1px solid ${c.border}`,
+    background: c.card, color: c.subtext, fontSize: 12, cursor: disabled ? 'default' : 'pointer',
+    fontFamily: 'inherit', opacity: disabled ? 0.4 : 1, minWidth: 28, textAlign: 'center',
+  })
 
   return (
     <>
@@ -254,7 +284,7 @@ export default function Ventas() {
               {search ? `Sin resultados para "${search}"` : 'Sin ventas registradas'}
             </div>
           ) : (
-            ventasFiltradas.map((v, i) => {
+            ventasPagina.map((v, i) => {
               const bEstado = badgeEstilo(v.estado)
               const metodo = v.metodo || '—'
               return (
@@ -291,7 +321,14 @@ export default function Ventas() {
 
                   <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{fmt(v.total)}</span>
 
-                  <span style={{ fontSize: 12, color: C.subtext }}>{metodo}</span>
+                  <span style={{ fontSize: 12, color: C.subtext, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {metodo}
+                    {v.estado === 'CERRADA' && (
+                      <button onClick={() => setEditMetodo({ id: v.id, metodo, ticket: v.ticket_numero })} title="Cambiar metodo" style={{ padding: 0, border: 'none', background: 'transparent', color: C.muted, cursor: 'pointer', display: 'flex' }}>
+                        <IcEdit />
+                      </button>
+                    )}
+                  </span>
 
                   <span style={{ fontSize: 12, color: C.subtext }}>{fmtDT(v.created_at)}</span>
 
@@ -324,6 +361,20 @@ export default function Ventas() {
             })
           )}
         </div>
+          {!loading && totalPages > 1 && (
+            <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, borderTop: `1px solid ${C.border}` }}>
+              <button onClick={() => setPage(1)} disabled={page === 1} style={pageBtnStyle(C, page === 1)}>{'<<'}</button>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={pageBtnStyle(C, page === 1)}>{'<'}</button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                <button key={p} onClick={() => setPage(p)} style={p === page ? { ...pageBtnStyle(C), background: '#B6CD38', color: '#0C0F14', fontWeight: 700, borderColor: '#B6CD38' } : pageBtnStyle(C)}>
+                  {p}
+                </button>
+              ))}
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={pageBtnStyle(C, page === totalPages)}>{'>'}</button>
+              <button onClick={() => setPage(totalPages)} disabled={page === totalPages} style={pageBtnStyle(C, page === totalPages)}>{'>>'}</button>
+              <span style={{ fontSize: 11, color: C.subtext, marginLeft: 8 }}>Pág. {page} de {totalPages}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -461,6 +512,38 @@ export default function Ventas() {
               {cancelling ? 'Cancelando...' : 'Confirmar cancelación'}
             </button>
           </div>
+        </div>
+      </Modal>
+
+      {/* Modal — Cambiar método de pago */}
+      <Modal open={!!editMetodo} onClose={() => setEditMetodo(null)} title={`Cambiar método — Ticket #${editMetodo?.ticket || ''}`} isDark={isDark}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <p style={{ margin: 0, fontSize: 13, color: C.subtext }}>
+            Método actual: <span style={{ fontWeight: 600, color: C.text }}>{editMetodo?.metodo}</span>
+          </p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {[
+              { key: 'EFECTIVO', label: 'Efectivo', color: '#00753F' },
+              { key: 'TARJETA', label: 'Tarjeta', color: '#237AAA' },
+              { key: 'TRANSFERENCIA', label: 'Transferencia', color: '#8A6A4A' },
+            ].map(m => (
+              <button key={m.key} onClick={() => handleUpdateMetodo(m.key)} style={{
+                flex: 1, padding: '12px 8px', borderRadius: 12, border: `1.5px solid ${editMetodo?.metodo === m.key ? m.color : C.border}`,
+                background: editMetodo?.metodo === m.key ? `${m.color}15` : C.inputBg,
+                color: editMetodo?.metodo === m.key ? m.color : C.subtext,
+                fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                transition: 'all .15s',
+              }}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setEditMetodo(null)} style={{
+            width: '100%', padding: '10px', borderRadius: 10, border: `1px solid ${C.border}`,
+            background: 'transparent', color: C.subtext, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+          }}>
+            Cancelar
+          </button>
         </div>
       </Modal>
     </>

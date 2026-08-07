@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useTheme } from '@/context/ThemeContext'
 import { finanzasService } from '@/services/finanzas.service'
 import { inventarioService } from '@/services/inventario.service'
+import { ventasService } from '@/services/ventas.service'
 import client from '@/api/client'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -322,6 +323,8 @@ export default function Finanzas() {
   const [gastos, setGastos] = useState([])
   const [cierres, setCierres] = useState([])
   const [loading, setLoading] = useState(true)
+  const [mejorVendedor, setMejorVendedor] = useState(null)
+  const [horaPico, setHoraPico] = useState(null)
 
   const [modalGasto, setModalGasto] = useState(false)
   const [formGasto, setFormGasto] = useState({ tipo: 'OTRO', monto: '', descripcion: '', observaciones: '', fecha: today() })
@@ -352,6 +355,29 @@ export default function Finanzas() {
         ])
         setResumenDia(dia)
         setResumenPeriodo(periodo)
+
+        const esUnDia = desde === hasta
+        const params = { estado: 'CERRADA', limite: 500 }
+        if (esUnDia) params.fecha = fecha
+        const vs = await ventasService.getVentas(params).catch(() => [])
+
+        const sellerMap = {}
+        vs.forEach(v => { sellerMap[v.vendedor_nombre] = (sellerMap[v.vendedor_nombre] || 0) + v.total })
+        const top = Object.entries(sellerMap).sort((a, b) => b[1] - a[1])
+        setMejorVendedor(top.length > 0 ? { nombre: top[0][0], total: top[0][1] } : null)
+
+        if (esUnDia) {
+          const hours = Array(12).fill(0)
+          vs.forEach(v => {
+            const h = new Date(v.created_at).getHours()
+            if (h >= 10 && h <= 21) hours[h - 10] += v.total
+          })
+          let maxH = -1, maxV = 0
+          hours.forEach((v, i) => { if (v > maxV) { maxV = v; maxH = i + 10 } })
+          setHoraPico(maxV > 0 ? { hora: `${maxH}h`, total: maxV } : null)
+        } else {
+          setHoraPico(null)
+        }
       } else if (tab === 'gastos') {
         const data = await finanzasService.getGastos({ desde, hasta }).catch(() => [])
         setGastos(data || [])
@@ -722,6 +748,39 @@ export default function Finanzas() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {!loading && (mejorVendedor || horaPico) && (
+              <div className="fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 24 }}>
+                {mejorVendedor && (
+                  <div style={{
+                    background: C.card, border: `1px solid ${C.border}`,
+                    borderRadius: 16, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12,
+                    boxShadow: isDark ? '0 4px 20px -4px rgba(0,0,0,0.4)' : '0 4px 16px -4px rgba(29,84,125,0.08)',
+                  }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: '#B6CD3818', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#B6CD38', fontSize: 14, fontWeight: 700 }}>#1</div>
+                    <div>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Mejor vendedor</span>
+                      <p style={{ margin: '2px 0 2px', fontSize: 14, fontWeight: 600, color: C.text }}>{mejorVendedor.nombre}</p>
+                      <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#B6CD38' }}>{fmt(mejorVendedor.total)}</p>
+                    </div>
+                  </div>
+                )}
+                {horaPico && (
+                  <div style={{
+                    background: C.card, border: `1px solid ${C.border}`,
+                    borderRadius: 16, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12,
+                    boxShadow: isDark ? '0 4px 20px -4px rgba(0,0,0,0.4)' : '0 4px 16px -4px rgba(29,84,125,0.08)',
+                  }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: '#237AAA18', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#237AAA', fontSize: 14, fontWeight: 700 }}>{horaPico.hora}</div>
+                    <div>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Hora pico</span>
+                      <p style={{ margin: '2px 0 2px', fontSize: 14, fontWeight: 600, color: C.text }}>Mayor ingreso</p>
+                      <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#237AAA' }}>{fmt(horaPico.total)}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

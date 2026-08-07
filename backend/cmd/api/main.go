@@ -13,6 +13,7 @@ import (
 	"paleteria-system/internal/finanzas"
 	"paleteria-system/internal/inventario"
 	"paleteria-system/internal/printer"
+	"paleteria-system/internal/test"
 	"paleteria-system/internal/usuarios"
 	"paleteria-system/internal/ventas"
 	"paleteria-system/pkg/response"
@@ -71,6 +72,8 @@ func main() {
 	// Depend
 	printer.RegisterRoutes(api)
 	email.RegisterRoutes(api)
+
+	test.RegisterRoutes(api, db)
 
 	finanzas.RegisterRoutes(api, db)
 	bitacora.RegisterRoutes(

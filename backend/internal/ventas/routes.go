@@ -23,4 +23,5 @@ func RegisterRoutes(router fiber.Router, db *pgxpool.Pool, cs *cortesias.Service
 	v.Post("/", handler.Confirmar)
 	v.Post("/:id/cobrar", handler.Cobrar)
 	v.Patch("/:id/cancelar", auth.RequireAdmin(), handler.Cancelar)
+	v.Patch("/:id/metodo-pago", handler.UpdateMetodoPago)
 }

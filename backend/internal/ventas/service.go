@@ -279,3 +279,20 @@ func (s *Service) Cobrar(ventaID, usuarioID string, pago Pago) (*Venta, error) {
 	v.Pagos = []Pago{pago}
 	return v, nil
 }
+
+func (s *Service) UpdateMetodoPago(id string, req UpdateMetodoPagoRequest) error {
+	if !metodosValidos[req.Metodo] {
+		return ErrMetodoPagoInvalido
+	}
+	v, err := s.repo.FindByID(id)
+	if err != nil {
+		return err
+	}
+	if v == nil {
+		return ErrVentaNoEncontrada
+	}
+	if v.Estado != EstadoCerrada {
+		return fmt.Errorf("solo se puede cambiar el metodo de pago de ventas cerradas")
+	}
+	return s.repo.UpdateMetodoPago(id, req.Metodo)
+}
