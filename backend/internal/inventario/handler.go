@@ -51,7 +51,7 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 		return response.Error(c, 400, "body inválido")
 	}
 
-	p, err := h.service.Create(claims.SucursalID, claims.UserID, req)
+	p, err := h.service.Create(claims.SucursalID, claims.UserID, claims.Nombre, req)
 	if err != nil {
 		if errors.Is(err, ErrDatosRequeridos) {
 			return response.Error(c, 400, "nombre es requerido y precio si no tiene presentaciones")
@@ -158,7 +158,7 @@ func (h *Handler) RegistrarMovimiento(c *fiber.Ctx) error {
 		return response.Error(c, 400, "body inválido")
 	}
 
-	m, err := h.service.RegistrarMovimiento(claims.UserID, req)
+	m, err := h.service.RegistrarMovimiento(claims.UserID, claims.Nombre, req)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrProductoNoEncontrado):

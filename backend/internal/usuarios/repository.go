@@ -113,6 +113,26 @@ func (r *Repository) UpdateEstado(id string, activo bool) error {
 	return err
 }
 
+func (r *Repository) ContarAdminsActivosExcepto(sucursalID, excluirID string) (int, error) {
+	var count int
+	err := r.db.QueryRow(context.Background(), `
+		SELECT COUNT(*)
+		FROM usuarios u
+		JOIN roles r ON r.id = u.rol_id
+		WHERE u.sucursal_id = $1
+			AND r.nombre = 'administrador'
+			AND u.activo = true
+			AND u.id <> $2
+	`, sucursalID, excluirID).Scan(&count)
+	return count, err
+}
+
+func (r *Repository) DeleteUsuario(id string) error {
+	_, err := r.db.Exec(context.Background(),
+		`DELETE FROM usuarios WHERE id = $1`, id)
+	return err
+}
+
 func (r *Repository) UpdatePassword(id, passwordHash string) error {
 	_, err := r.db.Exec(context.Background(), `
 		UPDATE usuarios SET password_hash = $1, updated_at = NOW() WHERE id = $2

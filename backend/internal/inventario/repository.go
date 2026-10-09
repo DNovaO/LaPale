@@ -187,10 +187,10 @@ func (r *Repository) RegistrarMovimiento(m *Movimiento) error {
 	m.StockDespues = int(nuevoStock)
 	err = tx.QueryRow(ctx, `
 		INSERT INTO movimientos_inventario
-			(producto_id, usuario_id, tipo, cantidad, stock_antes, stock_despues, referencia_id, observaciones)
-		VALUES ($1,$2,$3,$4,$5,$6,NULLIF($7,'')::uuid,$8)
+			(producto_id, usuario_id, usuario_nombre, tipo, cantidad, stock_antes, stock_despues, referencia_id, observaciones)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,NULLIF($8,'')::uuid,$9)
 		RETURNING id, created_at
-	`, m.ProductoID, m.UsuarioID, m.Tipo, m.Cantidad,
+	`, m.ProductoID, m.UsuarioID, m.UsuarioNombre, m.Tipo, m.Cantidad,
 		m.StockAntes, m.StockDespues, m.ReferenciaID, m.Observaciones,
 	).Scan(&m.ID, &m.CreatedAt)
 	if err != nil {
@@ -212,13 +212,13 @@ func (r *Repository) RegistrarMovimiento(m *Movimiento) error {
 func (r *Repository) FindMovimientos(filtros FiltrosMovimiento) ([]Movimiento, error) {
 	query := `
 		SELECT
-			m.id, m.producto_id, p.nombre, m.usuario_id, u.nombre,
+			m.id, m.producto_id, p.nombre, COALESCE(m.usuario_id::text,''), COALESCE(m.usuario_nombre, u.nombre, ''),
 			m.tipo, m.cantidad, m.stock_antes, m.stock_despues,
 			COALESCE(m.referencia_id::text,''), COALESCE(m.observaciones,''),
 			m.created_at
 		FROM movimientos_inventario m
 		JOIN productos p ON p.id = m.producto_id
-		JOIN usuarios u ON u.id = m.usuario_id
+		LEFT JOIN usuarios u ON u.id = m.usuario_id
 		WHERE 1=1
 	`
 	args := []any{}

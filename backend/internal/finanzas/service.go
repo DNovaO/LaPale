@@ -28,7 +28,7 @@ func NewService(repo *Repository) *Service {
 
 // ── Gastos ───────────────────────────────────────────────────
 
-func (s *Service) CreateGasto(sucursalID, usuarioID string, req CreateGastoRequest) (*Gasto, error) {
+func (s *Service) CreateGasto(sucursalID, usuarioID, usuarioNombre string, req CreateGastoRequest) (*Gasto, error) {
 	if req.Monto <= 0 {
 		return nil, ErrMontoInvalido
 	}
@@ -46,6 +46,7 @@ func (s *Service) CreateGasto(sucursalID, usuarioID string, req CreateGastoReque
 	g := &Gasto{
 		SucursalID:    sucursalID,
 		UsuarioID:     usuarioID,
+		UsuarioNombre: usuarioNombre,
 		Tipo:          req.Tipo,
 		Monto:         req.Monto,
 		Descripcion:   req.Descripcion,
@@ -86,9 +87,16 @@ func (s *Service) GetResumenSemana(sucursalID string) ([]ResumenDiario, error) {
 	return s.repo.GetResumenSemana(sucursalID)
 }
 
+func (s *Service) GetDetallePaletas(sucursalID, desde, hasta string) ([]DetallePaleta, error) {
+	if desde == "" || hasta == "" {
+		return nil, ErrDatosRequeridos
+	}
+	return s.repo.GetDetallePaletas(sucursalID, desde, hasta)
+}
+
 // ── Cierre de caja ───────────────────────────────────────────
 
-func (s *Service) CerrarCaja(sucursalID, usuarioID string, req CerrarCajaRequest) (*CierreCaja, error) {
+func (s *Service) CerrarCaja(sucursalID, usuarioID, usuarioNombre string, req CerrarCajaRequest) (*CierreCaja, error) {
 	// Calcular el resumen del día automáticamente
 	hoy := time.Now().Format("2006-01-02")
 	resumen, err := s.repo.GetResumenDia(sucursalID, hoy)
@@ -99,6 +107,7 @@ func (s *Service) CerrarCaja(sucursalID, usuarioID string, req CerrarCajaRequest
 	cierre := &CierreCaja{
 		SucursalID:         sucursalID,
 		UsuarioID:          usuarioID,
+		UsuarioNombre:      usuarioNombre,
 		TotalEfectivo:      resumen.TotalEfectivo,
 		TotalTarjeta:       resumen.TotalTarjeta,
 		TotalTransferencia: resumen.TotalTransferencia,

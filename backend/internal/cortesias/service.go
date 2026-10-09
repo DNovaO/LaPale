@@ -112,7 +112,7 @@ type ProductoStockInfo struct {
 
 func (s *Service) EvaluarCortesia(
 	ctx context.Context, tx pgx.Tx,
-	sucursalID string, monto float64, vendedorID, ventaID string,
+	sucursalID string, monto float64, vendedorID, vendedorNombre, ventaID string,
 	getProductoStock func(productoID string) (ProductoStockInfo, error),
 ) (*CortesiaInfo, error) {
 	rg, err := s.repo.FindMatchingForUpdate(ctx, tx, sucursalID, monto)
@@ -147,13 +147,14 @@ func (s *Service) EvaluarCortesia(
 	}
 
 	o := &CortesiaOtorgada{
-		VentaID:     ventaID,
-		ReglaID:     rg.ID,
-		ProductoID:  rg.ProductoID,
-		Cantidad:    rg.Cantidad,
-		MontoCompra: monto,
-		VendedorID:  vendedorID,
-		SucursalID:  sucursalID,
+		VentaID:        ventaID,
+		ReglaID:        rg.ID,
+		ProductoID:     rg.ProductoID,
+		Cantidad:       rg.Cantidad,
+		MontoCompra:    monto,
+		VendedorID:     vendedorID,
+		VendedorNombre: vendedorNombre,
+		SucursalID:     sucursalID,
 	}
 	if err := s.repo.InsertOtorgada(ctx, tx, o); err != nil {
 		return nil, fmt.Errorf("error al registrar cortesía otorgada: %w", err)

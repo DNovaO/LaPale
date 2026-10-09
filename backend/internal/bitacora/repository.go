@@ -33,20 +33,27 @@ func (r *Repository) Registrar(reg *Registro) error {
 		}
 	}
 
+	// Snapshot del nombre: si la cuenta se elimina después,
+	// el historial conserva quién hizo el registro.
+	var nombre string
+	_ = r.db.QueryRow(context.Background(),
+		`SELECT COALESCE(nombre,'') FROM usuarios WHERE id=$1`, reg.UsuarioID,
+	).Scan(&nombre)
+
 	_, err = r.db.Exec(context.Background(), `
 		INSERT INTO bitacora_actividad (
-			usuario_id, sucursal_id, modulo, accion,
+			usuario_id, usuario_nombre, sucursal_id, modulo, accion,
 			entidad, entidad_id,
 			datos_anteriores, datos_nuevos,
 			ip_address, user_agent
 		) VALUES (
 			$1, $2, $3, $4,
-			NULLIF($5,''), NULLIF($6,'')::uuid,
+			NULLIF($5,'')::uuid, NULLIF($6,'')::uuid,
 			NULLIF($7,'')::jsonb, NULLIF($8,'')::jsonb,
 			NULLIF($9,''), NULLIF($10,'')
 		)
 	`,
-		reg.UsuarioID, reg.SucursalID, reg.Modulo, reg.Accion,
+		reg.UsuarioID, nombre, reg.SucursalID, reg.Modulo, reg.Accion,
 		reg.Entidad, reg.EntidadID,
 		string(datosAnt), string(datosNuevos),
 		reg.IPAddress, reg.UserAgent,
@@ -57,14 +64,14 @@ func (r *Repository) Registrar(reg *Registro) error {
 func (r *Repository) FindAll(filtros FiltrosBitacora) ([]Registro, error) {
 	query := `
 		SELECT
-			b.id, b.usuario_id, u.nombre,
+			b.id, COALESCE(b.usuario_id::text,''), COALESCE(b.usuario_nombre, u.nombre, ''),
 			b.sucursal_id, b.modulo, b.accion,
 			COALESCE(b.entidad,''), COALESCE(b.entidad_id::text,''),
 			b.datos_anteriores, b.datos_nuevos,
 			COALESCE(b.ip_address,''), COALESCE(b.user_agent,''),
 			b.created_at
 		FROM bitacora_actividad b
-		JOIN usuarios u ON u.id = b.usuario_id
+		LEFT JOIN usuarios u ON u.id = b.usuario_id
 		WHERE b.sucursal_id = $1
 	`
 	args := []any{filtros.SucursalID}

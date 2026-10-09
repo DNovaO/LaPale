@@ -97,6 +97,7 @@ export default function MainLayout({ children }) {
   const navigate             = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const isDark = theme === 'dark'
 
   const closeMobile = () => setMobileOpen(false)
@@ -133,7 +134,7 @@ export default function MainLayout({ children }) {
     transition: 'width .25s cubic-bezier(.4,0,.2,1)',
     overflow: 'hidden',
     flexShrink: 0,
-    position: 'sticky', top: 0, height: '100vh',
+    position: 'sticky', top: 0, height: '100vh', maxHeight: '100dvh',
     zIndex: 40,
   }
 
@@ -164,7 +165,7 @@ export default function MainLayout({ children }) {
         {mobileOpen && (
           <div className="sidebar-mobile" style={{ position: 'fixed', inset: 0, zIndex: 50 }}>
             <div onClick={closeMobile} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }} />
-            <aside style={{ ...sidebarBaseStyle, width: 220, position: 'absolute', top: 0, left: 0, bottom: 0 }}>
+            <aside style={{ ...sidebarBaseStyle, width: 220, maxWidth: '85vw', position: 'absolute', top: 0, left: 0, bottom: 0, maxHeight: '100dvh' }}>
               <SidebarContent />
             </aside>
           </div>
@@ -207,13 +208,48 @@ export default function MainLayout({ children }) {
               }}>
                 {isDark ? <IcSun /> : <IcMoon />}
               </button>
-              <div style={{
-                width: 32, height: 32, borderRadius: '50%',
-                background: 'linear-gradient(135deg, #1D547D 0%, #237AAA 100%)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'white', fontWeight: 700, fontSize: 13,
-              }}>
-                {user?.nombre?.charAt(0)?.toUpperCase()}
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setUserMenuOpen(o => !o)}
+                  title="Cuenta"
+                  style={{
+                    width: 36, height: 36, borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #1D547D 0%, #237AAA 100%)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'white', fontWeight: 700, fontSize: 13,
+                    border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  {user?.nombre?.charAt(0)?.toUpperCase()}
+                </button>
+                {userMenuOpen && (
+                  <>
+                    <div onClick={() => setUserMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 45 }} />
+                    <div style={{
+                      position: 'absolute', right: 0, top: 44, zIndex: 46,
+                      width: 220, padding: 8, borderRadius: 12,
+                      background: C.sidebar.bg, border: `1px solid ${C.sidebar.border}`,
+                      boxShadow: '0 12px 32px -8px rgba(0,0,0,0.35)',
+                    }}>
+                      <div style={{ padding: '8px 10px', borderRadius: 8 }}>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {user?.nombre}
+                        </p>
+                        <p style={{ margin: '2px 0 0', fontSize: 11, color: C.subtext }}>{user?.rol}</p>
+                      </div>
+                      <button onClick={() => { setUserMenuOpen(false); handleLogout() }} style={{
+                        width: '100%', minHeight: 44, padding: '10px 12px',
+                        borderRadius: 8, border: 'none', cursor: 'pointer',
+                        background: 'rgba(231,45,139,0.08)', display: 'flex', alignItems: 'center',
+                        gap: 10, color: '#E72D8B', fontSize: 13, fontWeight: 600,
+                        fontFamily: 'inherit', marginTop: 4,
+                      }}>
+                        <IcLogout />
+                        Cerrar sesión
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </header>
@@ -252,7 +288,7 @@ export default function MainLayout({ children }) {
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '12px 8px', overflowY: 'auto' }}>
+      <nav style={{ flex: 1, minHeight: 0, padding: '12px 8px', overflowY: 'auto' }}>
         {navItems.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
@@ -293,7 +329,12 @@ export default function MainLayout({ children }) {
       </nav>
 
       {/* User + logout */}
-      <div style={{ padding: '12px 8px', borderTop: `1px solid ${C.sidebar.border}` }}>
+      <div style={{
+        padding: '12px 8px', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))',
+        borderTop: `1px solid ${C.sidebar.border}`,
+        position: 'sticky', bottom: 0, zIndex: 1,
+        background: C.sidebar.bg,
+      }}>
         {!collapsed && (
           <div style={{ padding: '8px 12px', borderRadius: 10, marginBottom: 6,
             background: isDark ? 'rgba(35,122,170,0.08)' : 'rgba(29,84,125,0.05)' }}>
@@ -304,7 +345,7 @@ export default function MainLayout({ children }) {
           </div>
         )}
         <button onClick={handleLogout} style={{
-          width: '100%', padding: collapsed ? '10px 0' : '9px 12px',
+          width: '100%', minHeight: 44, padding: collapsed ? '10px 0' : '9px 12px',
           borderRadius: 10, border: 'none', cursor: 'pointer',
           background: 'transparent', display: 'flex', alignItems: 'center',
           gap: 10, color: '#E72D8B', fontSize: 13, fontWeight: 500,

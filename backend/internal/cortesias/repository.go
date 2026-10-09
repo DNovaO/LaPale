@@ -182,11 +182,11 @@ func (r *Repository) IncrementarContador(ctx context.Context, tx pgx.Tx, reglaID
 func (r *Repository) InsertOtorgada(ctx context.Context, tx pgx.Tx, o *CortesiaOtorgada) error {
 	return tx.QueryRow(ctx, `
 		INSERT INTO cortesias_otorgadas (venta_id, regla_id, producto_id, cantidad,
-			monto_compra, vendedor_id, sucursal_id)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)
+			monto_compra, vendedor_id, vendedor_nombre, sucursal_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		RETURNING id, created_at
 	`, o.VentaID, o.ReglaID, o.ProductoID, o.Cantidad,
-		o.MontoCompra, o.VendedorID, o.SucursalID,
+		o.MontoCompra, o.VendedorID, o.VendedorNombre, o.SucursalID,
 	).Scan(&o.ID, &o.CreatedAt)
 }
 

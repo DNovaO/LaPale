@@ -2,8 +2,10 @@ package test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"paleteria-system/internal/auth"
@@ -14,9 +16,34 @@ import (
 )
 
 type productoTest struct {
-	ID     string
-	Nombre string
-	Precio float64
+	ID             string
+	Nombre         string
+	Precio         float64
+	Presentaciones string
+}
+
+type presentacionTest struct {
+	Precio float64 `json:"precio"`
+}
+
+func precioVenta(p productoTest, rng *rand.Rand) float64 {
+	if p.Presentaciones == "" {
+		return p.Precio
+	}
+	var pres []presentacionTest
+	if err := json.Unmarshal([]byte(p.Presentaciones), &pres); err != nil || len(pres) == 0 {
+		return p.Precio
+	}
+	var precios []float64
+	for _, pr := range pres {
+		if pr.Precio > 0 {
+			precios = append(precios, pr.Precio)
+		}
+	}
+	if len(precios) == 0 {
+		return p.Precio
+	}
+	return precios[rng.Intn(len(precios))]
 }
 
 func GenerarVentas(db *pgxpool.Pool) fiber.Handler {
@@ -27,7 +54,8 @@ func GenerarVentas(db *pgxpool.Pool) fiber.Handler {
 
 		// Obtener productos activos de tipo VENTA
 		rows, err := db.Query(ctx, `
-			SELECT id, nombre, precio FROM productos WHERE activo=true AND tipo='VENTA' ORDER BY nombre
+			SELECT id, nombre, precio, COALESCE(presentaciones::text,'')
+			FROM productos WHERE activo=true AND tipo='VENTA' ORDER BY nombre
 		`)
 		if err != nil {
 			return response.Error(c, 500, "error obteniendo productos")
@@ -37,13 +65,23 @@ func GenerarVentas(db *pgxpool.Pool) fiber.Handler {
 		var prods []productoTest
 		for rows.Next() {
 			var p productoTest
-			if err := rows.Scan(&p.ID, &p.Nombre, &p.Precio); err != nil {
+			if err := rows.Scan(&p.ID, &p.Nombre, &p.Precio, &p.Presentaciones); err != nil {
 				continue
 			}
 			prods = append(prods, p)
 		}
 		if len(prods) == 0 {
 			return response.Error(c, 400, "no hay productos de venta")
+		}
+
+		var paletas []productoTest
+		for _, p := range prods {
+			if strings.Contains(strings.ToLower(p.Nombre), "paleta") {
+				paletas = append(paletas, p)
+			}
+		}
+		if len(paletas) == 0 {
+			return response.Error(c, 400, "no hay productos de paleta para generar pruebas")
 		}
 
 		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -67,9 +105,13 @@ func GenerarVentas(db *pgxpool.Pool) fiber.Handler {
 
 				for ii := 0; ii < numItems; ii++ {
 					prod := prods[rng.Intn(len(prods))]
+					if rng.Float64() < 0.7 {
+						prod = paletas[rng.Intn(len(paletas))]
+					}
+					precio := precioVenta(prod, rng)
 					cant := float64(1 + rng.Intn(3))
-					items = append(items, item{prod, cant, prod.Precio})
-					subtotal += prod.Precio * cant
+					items = append(items, item{prod, cant, precio})
+					subtotal += precio * cant
 				}
 
 				metodos := []string{"EFECTIVO", "TARJETA", "TRANSFERENCIA"}

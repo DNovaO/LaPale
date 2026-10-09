@@ -3,8 +3,9 @@ import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import QRCode from 'qrcode'
 import { jsPDF } from 'jspdf'
-
-const API = '/api'
+import client from '@/api/client'
+import { isSessionExpiredError, registerSessionSnapshot } from '@/session'
+import { clearPosDraft, loadPosDraft, savePosDraft } from '@/posDraft'
 
 const IcSearch    = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
 const IcPlus      = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -48,9 +49,12 @@ export default function POS() {
 
   const [productos,    setProductos]    = useState([])
   const [busqueda,     setBusqueda]     = useState('')
-  const [ticket,       setTicket]       = useState([])
-  const [metodo,       setMetodo]       = useState('EFECTIVO')
-  const [montoRecibido,setMontoRecibido]= useState('')
+  const [cuentas,      setCuentas]      = useState([
+    { id: 'cuenta-1', nombre: 'Cuenta 1', items: [], metodo: 'EFECTIVO', montoRecibido: '' },
+  ])
+  const [cuentaActivaId, setCuentaActivaId] = useState('cuenta-1')
+  const [creandoCuenta, setCreandoCuenta] = useState(false)
+  const [nombreNueva,  setNombreNueva]  = useState('')
   const [loading,      setLoading]      = useState(false)
   const [loadingProds, setLoadingProds] = useState(true)
   const [ventaExitosa, setVentaExitosa] = useState(null)
@@ -58,8 +62,72 @@ export default function POS() {
   const [presentPanel, setPresentPanel] = useState(null)
   const [previewCortesia, setPreviewCortesia] = useState(null)
   const [forzarEnvio, setForzarEnvio] = useState(false)
+  const [draftAviso, setDraftAviso] = useState('')
+  const draftRestaurado = useRef(false)
 
   const enviarACaja = forzarEnvio
+
+  const cuentaActiva = cuentas.find(c => c.id === cuentaActivaId) ?? cuentas[0]
+  const ticket = cuentaActiva?.items ?? []
+  const metodo = cuentaActiva?.metodo ?? 'EFECTIVO'
+  const montoRecibido = cuentaActiva?.montoRecibido ?? ''
+
+  const actualizarCuentaActiva = (parche) => {
+    setCuentas(prev => prev.map(c => c.id === cuentaActivaId
+      ? { ...c, ...(typeof parche === 'function' ? parche(c) : parche) }
+      : c))
+  }
+  const actualizarItemsCuentaActiva = (fn) => {
+    actualizarCuentaActiva(c => ({ items: fn(c.items) }))
+  }
+  const totalCuenta = (c) => (c?.items ?? []).reduce((s, i) =>
+    i.esCortesia ? s : s + (i.presentacion?.precio || i.producto.precio) * i.cantidad, 0)
+  const unidadesEnCuentas = (productoId) => cuentas
+    .flatMap(c => c.items)
+    .filter(i => i.producto.id === productoId)
+    .reduce((s, i) => s + i.cantidad, 0)
+
+  const crearCuenta = () => {
+    const nombre = (nombreNueva.trim() || `Cuenta ${cuentas.length + 1}`).slice(0, 30)
+    const id = `cuenta-${Date.now()}`
+    setCuentas(prev => [...prev, { id, nombre, items: [], metodo: 'EFECTIVO', montoRecibido: '' }])
+    setCuentaActivaId(id)
+    setNombreNueva('')
+    setCreandoCuenta(false)
+    if (!isTouch) searchRef.current?.focus()
+  }
+
+  const [cuentaPorCerrar, setCuentaPorCerrar] = useState(null)
+
+  const cerrarCuenta = (id) => {
+    const c = cuentas.find(x => x.id === id)
+    if (!c) return
+    if (c.items.length > 0) {
+      setCuentaPorCerrar(c)
+      return
+    }
+    confirmarCierreCuenta(id)
+  }
+
+  const confirmarCierreCuenta = (id) => {
+    const objetivo = id ?? cuentaPorCerrar?.id
+    const c = cuentas.find(x => x.id === objetivo)
+    if (!c) {
+      setCuentaPorCerrar(null)
+      return
+    }
+    let rest = cuentas.filter(x => x.id !== c.id)
+    if (rest.length === 0) {
+      rest = [{ id: `cuenta-${Date.now()}`, nombre: 'Cuenta 1', items: [], metodo: 'EFECTIVO', montoRecibido: '' }]
+    }
+    const idx = cuentas.findIndex(x => x.id === c.id)
+    setCuentas(rest)
+    if (cuentaActivaId === c.id || !rest.some(x => x.id === cuentaActivaId)) {
+      setCuentaActivaId(rest[Math.min(idx, rest.length - 1)].id)
+    }
+    setCuentaPorCerrar(null)
+    if (!isTouch) searchRef.current?.focus()
+  }
 
   const C = {
     bg:       isDark ? '#0C0F14' : '#F1F6F6',
@@ -76,12 +144,11 @@ export default function POS() {
   }
 
   useEffect(() => {
-    fetch(`${API}/inventario/productos?activos=true&tipo=VENTA`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then(r => r.json())
-      .then(d => {
-        const sorted = (d.data ?? [])
+    let cancelled = false
+    client.get('/inventario/productos', { params: { activos: true, tipo: 'VENTA' } })
+      .then(({ data }) => {
+        if (cancelled) return
+        const sorted = (data.data ?? [])
         const expanded = []
         sorted.forEach(p => {
           const pres = parsePresentaciones(p.presentaciones)
@@ -110,9 +177,86 @@ export default function POS() {
         })
         setProductos(expanded)
       })
-      .catch(() => setError('Error al cargar productos'))
-      .finally(() => setLoadingProds(false))
+      .catch((e) => {
+        if (cancelled || isSessionExpiredError(e)) return
+        setError('Error al cargar productos')
+      })
+      .finally(() => { if (!cancelled) setLoadingProds(false) })
+    return () => { cancelled = true }
   }, [token])
+
+  useEffect(() => registerSessionSnapshot(() => {
+    if (ventaExitosa) return
+    savePosDraft({ cuentas, cuentaActivaId, user })
+  }), [cuentas, cuentaActivaId, user, ventaExitosa])
+
+  useEffect(() => {
+    if (!user?.id || ventaExitosa || !draftRestaurado.current) return
+    savePosDraft({ cuentas, cuentaActivaId, user })
+  }, [cuentas, cuentaActivaId, user, ventaExitosa])
+
+  useEffect(() => {
+    if (draftRestaurado.current || ventaExitosa) return
+    if (productos.length === 0 || !user?.id) return
+    if (cuentas.some(c => c.items.length > 0)) {
+      draftRestaurado.current = true
+      return
+    }
+    const draft = loadPosDraft()
+    if (!draft) {
+      draftRestaurado.current = true
+      return
+    }
+    if ((draft.userId && draft.userId !== user.id) || (draft.sucursalId && draft.sucursalId !== user.sucursal_id)) {
+      draftRestaurado.current = true
+      return
+    }
+    const usados = {}
+    const restauradas = []
+    let omitidos = 0
+    for (const dc of draft.cuentas) {
+      const items = []
+      for (const it of dc.items) {
+        const prod = productos.find(p => p.id === it.producto_id)
+        if (!prod || prod.stock_actual <= 0) { omitidos += 1; continue }
+        const presentacion = it.presentacion ? {
+          etiqueta: it.presentacion.etiqueta,
+          precio: it.presentacion.precio,
+          factor: it.presentacion.factor,
+        } : null
+        const factor = presentacion?.factor || 1
+        const usado = usados[it.producto_id] || 0
+        const disponible = Math.max(0, prod.stock_actual - usado)
+        const maxUnidades = Math.floor((disponible + 1e-9) / factor)
+        const cantidad = Math.min(it.cantidad, maxUnidades)
+        if (!Number.isFinite(cantidad) || cantidad <= 0) { omitidos += 1; continue }
+        usados[it.producto_id] = usado + cantidad * factor
+        items.push({ producto: prod, cantidad, presentacion, esCortesia: !!it.esCortesia })
+      }
+      restauradas.push({
+        id: dc.id,
+        nombre: dc.nombre,
+        items,
+        metodo: ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA'].includes(dc.metodo) ? dc.metodo : 'EFECTIVO',
+        montoRecibido: typeof dc.montoRecibido === 'string' ? dc.montoRecibido : '',
+      })
+    }
+    draftRestaurado.current = true
+    const conItems = restauradas.filter(c => c.items.length > 0)
+    if (conItems.length > 0) {
+      setCuentas(conItems)
+      if (conItems.some(c => c.id === draft.cuentaActivaId)) {
+        setCuentaActivaId(draft.cuentaActivaId)
+      } else {
+        setCuentaActivaId(conItems[0].id)
+      }
+      setDraftAviso(omitidos > 0
+        ? 'Se recuperaron cuentas pendientes (algunas líneas ya no tenían stock).'
+        : 'Se recuperaron cuentas pendientes.')
+    } else {
+      clearPosDraft()
+    }
+  }, [productos, user, cuentas, ventaExitosa])
 
   const productosFiltrados = productos.filter(p =>
     p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -121,7 +265,7 @@ export default function POS() {
 
   const handleClickProducto = (producto) => {
     if (producto.stock_actual <= 0) return
-    const enTicket = ticket.filter(i => i.producto.id === producto.id).reduce((s, i) => s + i.cantidad, 0)
+    const enTicket = unidadesEnCuentas(producto.id)
     if (enTicket >= producto.stock_actual) return
     if (producto._virtual) {
       agregarAlTicket(producto, 1, producto._presentacion)
@@ -142,7 +286,7 @@ export default function POS() {
   }, [presentPanel])
 
   const agregarAlTicket = (producto, cantidad, presentacion) => {
-    setTicket(prev => {
+    actualizarItemsCuentaActiva(prev => {
       const key = presentacion ? `${producto.id}_${presentacion.etiqueta}` : producto.id
       const existe = prev.find(i => {
         const ik = i.presentacion ? `${i.producto.id}_${i.presentacion.etiqueta}` : i.producto.id
@@ -161,8 +305,9 @@ export default function POS() {
   }
 
   const toggleCortesiaItem = (itemIdx) => {
-    setTicket(prev => {
+    actualizarItemsCuentaActiva(prev => {
       const item = prev[itemIdx]
+      if (!item) return prev
       if (item.cantidad > 1) {
         const before = prev.slice(0, itemIdx)
         const after = prev.slice(itemIdx + 1)
@@ -180,21 +325,21 @@ export default function POS() {
   }
 
   const cambiarCantidad = (itemIdx, delta) => {
-    setTicket(prev => {
+    actualizarItemsCuentaActiva(prev => {
       const newTicket = [...prev]
+      if (!newTicket[itemIdx]) return prev
       newTicket[itemIdx] = { ...newTicket[itemIdx], cantidad: newTicket[itemIdx].cantidad + delta }
       return newTicket.filter(i => i.cantidad > 0)
     })
   }
 
-  const quitarItem = (itemIdx) => setTicket(prev => prev.filter((_, i) => i !== itemIdx))
+  const quitarItem = (itemIdx) => actualizarItemsCuentaActiva(prev => prev.filter((_, i) => i !== itemIdx))
 
   const limpiarTicket = () => {
-    setTicket([])
-    setMetodo('EFECTIVO')
-    setMontoRecibido('')
+    actualizarCuentaActiva({ items: [], metodo: 'EFECTIVO', montoRecibido: '' })
     setError('')
     setPreviewCortesia(null)
+    setDraftAviso('')
     if (!isTouch) searchRef.current?.focus()
   }
 
@@ -216,12 +361,12 @@ export default function POS() {
     let cancelled = false
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`${API}/cortesias/preview?monto=${subtotal}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        const d = await res.json()
-        if (!cancelled) setPreviewCortesia(d?.data ?? null)
-      } catch { if (!cancelled) setPreviewCortesia(null) }
+        const { data } = await client.get('/cortesias/preview', { params: { monto: subtotal } })
+        if (!cancelled) setPreviewCortesia(data?.data ?? null)
+      } catch (e) {
+        if (cancelled || isSessionExpiredError(e)) return
+        setPreviewCortesia(null)
+      }
     }, 300)
     return () => { cancelled = true; clearTimeout(timer) }
   }, [subtotal, token])
@@ -245,15 +390,17 @@ export default function POS() {
         ...(enviarACaja && { abierta: true }),
       }
 
-      const res = await fetch(`${API}/ventas`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.message ?? 'Error al confirmar venta')
+      const { data } = await client.post('/ventas', body)
 
       setVentaExitosa({ ...data.data, cambio, enviadoACaja: enviarACaja })
+
+      const idxCobrada = cuentas.findIndex(c => c.id === cuentaActivaId)
+      let restantes = cuentas.filter(c => c.id !== cuentaActivaId)
+      if (restantes.length === 0) {
+        restantes = [{ id: `cuenta-${Date.now()}`, nombre: 'Cuenta 1', items: [], metodo: 'EFECTIVO', montoRecibido: '' }]
+      }
+      setCuentas(restantes)
+      setCuentaActivaId(restantes[Math.min(Math.max(idxCobrada, 0), restantes.length - 1)].id)
 
       if (!enviarACaja) {
         setProductos(prev => prev.map(p => {
@@ -264,34 +411,33 @@ export default function POS() {
         }))
 
         try {
-          await fetch(`${API}/printer/ticket`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({
-              NombreTienda: 'La Pale',
-              Folio: `#${data.data.ticket_numero}`,
-              Fecha: new Date().toLocaleDateString('es-MX'),
-              Vendedor: user?.nombre || '',
-              Items: ticket.map(i => ({
-                Nombre: i.producto.nombre + (i.esCortesia ? ' (Cortesia)' : ''),
-                Cantidad: i.cantidad,
-                Precio: i.esCortesia ? 0 : (i.presentacion?.precio || i.producto.precio),
-                Subtotal: i.esCortesia ? 0 : (i.presentacion?.precio || i.producto.precio) * i.cantidad,
-              })),
-              Subtotal: subtotal,
-              Descuento: 0,
-              Total: total,
-              MetodoPago: metodo,
-              Efectivo: metodo === 'EFECTIVO' ? parseFloat(montoRecibido || total) : total,
-              Cambio: cambio,
-            }),
+          await client.post('/printer/ticket', {
+            NombreTienda: 'La Pale',
+            Folio: `#${data.data.ticket_numero}`,
+            Fecha: new Date().toLocaleDateString('es-MX'),
+            Vendedor: user?.nombre || '',
+            Items: ticket.map(i => ({
+              Nombre: i.producto.nombre + (i.esCortesia ? ' (Cortesia)' : ''),
+              Cantidad: i.cantidad,
+              Precio: i.esCortesia ? 0 : (i.presentacion?.precio || i.producto.precio),
+              Subtotal: i.esCortesia ? 0 : (i.presentacion?.precio || i.producto.precio) * i.cantidad,
+            })),
+            Subtotal: subtotal,
+            Descuento: 0,
+            Total: total,
+            MetodoPago: metodo,
+            Efectivo: metodo === 'EFECTIVO' ? parseFloat(montoRecibido || total) : total,
+            Cambio: cambio,
           })
         } catch (printErr) {
-          console.warn('Error al imprimir:', printErr)
+          if (!isSessionExpiredError(printErr)) {
+            console.warn('Error al imprimir:', printErr)
+          }
         }
       }
     } catch (e) {
-      setError(e.message)
+      if (isSessionExpiredError(e)) return
+      setError(e.response?.data?.message || e.message)
     } finally {
       setLoading(false)
     }
@@ -302,8 +448,7 @@ export default function POS() {
       <TicketModal
         venta={ventaExitosa}
         C={C}
-        token={token}
-        onNuevaVenta={() => { setVentaExitosa(null); limpiarTicket() }}
+        onNuevaVenta={() => { setVentaExitosa(null) }}
       />
     )
   }
@@ -374,9 +519,56 @@ export default function POS() {
               </div>
             </div>
           )}
+
+          {cuentaPorCerrar && (
+            <div className="fade-in" onClick={() => setCuentaPorCerrar(null)} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+              <div className="pop-in" onClick={e => e.stopPropagation()} style={{ background: C.surface, borderRadius: 16, padding: '20px 24px', border: `1px solid ${C.border}`, width: '100%', maxWidth: 340, boxShadow: isDark ? '0 20px 60px -8px rgba(0,0,0,0.8)' : '0 20px 60px -8px rgba(29,84,125,0.2)' }}>
+                <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: C.text }}>Cerrar cuenta</h3>
+                <p style={{ margin: '0 0 16px', fontSize: 13, color: C.subtext }}>
+                  ¿Cerrar <strong style={{ color: C.text }}>“{cuentaPorCerrar.nombre}”</strong>? Se perderán sus {cuentaPorCerrar.items.reduce((s, i) => s + i.cantidad, 0)} artículo(s).
+                </p>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => setCuentaPorCerrar(null)} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1px solid ${C.border}`, background: 'transparent', color: C.subtext, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Volver
+                  </button>
+                  <button onClick={() => confirmarCierreCuenta()} style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #E72D8B 0%, #c0206e 100%)', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{ width: 360, display: 'flex', flexDirection: 'column', background: C.surface, borderRadius: 16, border: `1px solid ${C.border}`, overflow: 'hidden', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 6, padding: '8px 12px', overflowX: 'auto', borderBottom: `1px solid ${C.border}`, alignItems: 'center' }}>
+            {cuentas.map(c => {
+              const activa = c.id === cuentaActivaId
+              const n = c.items.reduce((s, i) => s + i.cantidad, 0)
+              return (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', flexShrink: 0, borderRadius: 8, border: `1px solid ${activa ? C.lime : C.border}`, background: activa ? (isDark ? 'rgba(182,205,56,0.12)' : 'rgba(0,117,63,0.08)') : 'transparent' }}>
+                  <button onClick={() => setCuentaActivaId(c.id)} title={c.nombre} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px 4px 6px 10px', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6, maxWidth: 130 }}>
+                    <span style={{ fontSize: 12, fontWeight: activa ? 700 : 500, color: activa ? C.lime : C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.nombre}</span>
+                    {n > 0 && <span style={{ background: activa ? C.lime : C.subtext, color: activa ? '#0C0F14' : C.surface, borderRadius: 20, fontSize: 10, fontWeight: 700, padding: '0 6px' }}>{n}</span>}
+                  </button>
+                  {cuentas.length > 1 && (
+                    <button onClick={() => cerrarCuenta(c.id)} title={`Cerrar ${c.nombre}`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, padding: '6px 8px 6px 2px', fontSize: 12, fontFamily: 'inherit' }}>×</button>
+                  )}
+                </div>
+              )
+            })}
+            {creandoCuenta ? (
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                <input autoFocus value={nombreNueva} onChange={e => setNombreNueva(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') crearCuenta(); if (e.key === 'Escape') { setCreandoCuenta(false); setNombreNueva('') } }} placeholder="Nombre" maxLength={30}
+                  style={{ width: 110, padding: '6px 8px', borderRadius: 8, border: `1px solid ${C.lime}`, background: C.inputBg, color: C.text, fontSize: 12, outline: 'none', fontFamily: 'inherit' }} />
+                <button onClick={crearCuenta} style={{ padding: '6px 10px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #B6CD38 0%, #00753F 100%)', color: '#0C0F14', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>OK</button>
+              </div>
+            ) : (
+              <button onClick={() => { setNombreNueva(''); setCreandoCuenta(true) }} title="Nueva cuenta" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 8, border: `1px dashed ${C.border}`, background: 'transparent', color: C.subtext, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+                <IcPlus /> Nueva
+              </button>
+            )}
+          </div>
           <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <IcReceipt />
@@ -385,6 +577,13 @@ export default function POS() {
             </div>
             {ticket.length > 0 && <button onClick={limpiarTicket} style={{ padding: '4px 10px', borderRadius: 8, border: 'none', background: 'rgba(231,45,139,0.08)', color: C.pink, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Limpiar</button>}
           </div>
+
+          {draftAviso && (
+            <div style={{ margin: '8px 12px 0', padding: '8px 12px', borderRadius: 8, background: isDark ? 'rgba(182,205,56,0.08)' : 'rgba(0,117,63,0.06)', border: '1px solid rgba(182,205,56,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ fontSize: 12, color: C.text }}>{draftAviso}</span>
+              <button onClick={() => setDraftAviso('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.subtext, fontSize: 12 }}>✕</button>
+            </div>
+          )}
 
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
             {ticket.length === 0 ? (
@@ -405,7 +604,7 @@ export default function POS() {
                       <button onClick={() => toggleCortesiaItem(idx)} style={{ width: 24, height: 24, borderRadius: 6, border: 'none', cursor: 'pointer', padding: 0, background: item.esCortesia ? 'rgba(231,45,139,0.15)' : 'transparent', color: item.esCortesia ? C.pink : C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .1s', fontSize: 12 }}><IcGift /></button>
                       <CantidadBtn onClick={() => cambiarCantidad(idx, -1)} C={C}><IcMinus /></CantidadBtn>
                       <span style={{ fontSize: 13, fontWeight: 600, color: C.text, minWidth: 20, textAlign: 'center' }}>{item.cantidad}</span>
-                      <CantidadBtn onClick={() => cambiarCantidad(idx, 1)} disabled={ticket.reduce((s, i) => i.producto.id === item.producto.id ? s + i.cantidad : s, 0) >= item.producto.stock_actual} C={C}><IcPlus /></CantidadBtn>
+                      <CantidadBtn onClick={() => cambiarCantidad(idx, 1)} disabled={unidadesEnCuentas(item.producto.id) >= item.producto.stock_actual} C={C}><IcPlus /></CantidadBtn>
                       <CantidadBtn onClick={() => quitarItem(idx)} C={C} danger><IcTrash /></CantidadBtn>
                     </div>
                     <span style={{ fontSize: 13, fontWeight: 600, color: item.esCortesia ? C.pink : C.lime, minWidth: 60, textAlign: 'right', flexShrink: 0 }}>{item.esCortesia ? '$0.00' : fmt(precio * item.cantidad)}</span>
@@ -438,14 +637,14 @@ export default function POS() {
             {!enviarACaja && (
               <div style={{ display: 'flex', gap: 6 }}>
                 {[{ key: 'EFECTIVO', label: 'Efectivo', icon: <IcCash /> }, { key: 'TARJETA', label: 'Tarjeta', icon: <IcCard /> }, { key: 'TRANSFERENCIA', label: 'Transf.', icon: <IcTransfer /> }].map(m => (
-                  <button key={m.key} onClick={() => { setMetodo(m.key); setMontoRecibido('') }} style={{ flex: 1, padding: '8px 4px', borderRadius: 10, border: `1px solid ${metodo === m.key ? C.lime : C.border}`, background: metodo === m.key ? (isDark ? 'rgba(182,205,56,0.12)' : 'rgba(0,117,63,0.08)') : 'transparent', color: metodo === m.key ? C.lime : C.subtext, fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, fontFamily: 'inherit', transition: 'all .15s' }}>{m.icon}{m.label}</button>
+                  <button key={m.key} onClick={() => actualizarCuentaActiva({ metodo: m.key, montoRecibido: '' })} style={{ flex: 1, padding: '8px 4px', borderRadius: 10, border: `1px solid ${metodo === m.key ? C.lime : C.border}`, background: metodo === m.key ? (isDark ? 'rgba(182,205,56,0.12)' : 'rgba(0,117,63,0.08)') : 'transparent', color: metodo === m.key ? C.lime : C.subtext, fontSize: 11, fontWeight: 500, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, fontFamily: 'inherit', transition: 'all .15s' }}>{m.icon}{m.label}</button>
                 ))}
               </div>
             )}
 
             {!enviarACaja && metodo === 'EFECTIVO' && (
               <div>
-                <input type="number" value={montoRecibido} onChange={e => setMontoRecibido(e.target.value)} placeholder={`Monto recibido (min. ${fmt(total)})`} min={total}
+                <input type="number" value={montoRecibido} onChange={e => actualizarCuentaActiva({ montoRecibido: e.target.value })} placeholder={`Monto recibido (min. ${fmt(total)})`} min={total}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: `1px solid ${montoRecibido && parseFloat(montoRecibido) < total ? C.pink : C.border}`, background: C.inputBg, color: C.text, fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
                 {montoRecibido && parseFloat(montoRecibido) >= total && (
                   <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderRadius: 8, background: isDark ? 'rgba(182,205,56,0.08)' : 'rgba(0,117,63,0.06)' }}>
@@ -508,7 +707,7 @@ function CantidadBtn({ onClick, disabled, children, C, danger }) {
   )
 }
 
-function TicketModal({ venta, C, onNuevaVenta, token }) {
+function TicketModal({ venta, C, onNuevaVenta }) {
   const [emailCliente, setEmailCliente] = useState('')
   const [enviandoCorreo, setEnviandoCorreo] = useState(false)
   const [estadoEmail, setEstadoEmail] = useState(null)
@@ -712,11 +911,9 @@ function TicketModal({ venta, C, onNuevaVenta, token }) {
         const formData = new FormData()
         formData.append('pdf', blob, 'ticket.pdf')
 
-        const res = await fetch('/api/tickets/upload', {
-          method: 'POST',
-          body: formData,
+        const { data } = await client.post('/tickets/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
         })
-        const data = await res.json()
         if (cancelled) return
 
         const url = window.location.origin + data.data.url
@@ -734,28 +931,23 @@ function TicketModal({ venta, C, onNuevaVenta, token }) {
     setEnviandoCorreo(true)
     setEstadoEmail(null)
     try {
-      const res = await fetch(`${API}/email/ticket`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          email: emailCliente.trim(),
-          ticket_numero: venta.ticket_numero,
-          total: venta.total,
-          metodo: venta.metodo || 'EFECTIVO',
-          items: venta.detalle?.map(d => ({
-            nombre: d.producto_nombre + (d.es_cortesia ? ' (Cortesia)' : ''),
-            cantidad: d.cantidad,
-            precio: d.precio_unitario,
-          })) || [],
-        }),
+      await client.post('/email/ticket', {
+        email: emailCliente.trim(),
+        ticket_numero: venta.ticket_numero,
+        total: venta.total,
+        metodo: venta.metodo || 'EFECTIVO',
+        items: venta.detalle?.map(d => ({
+          nombre: d.producto_nombre + (d.es_cortesia ? ' (Cortesia)' : ''),
+          cantidad: d.cantidad,
+          precio: d.precio_unitario,
+        })) || [],
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.message || 'Error al enviar')
       setEstadoEmail('ok')
       setMensajeEmail('Ticket enviado con exito')
     } catch (e) {
+      if (isSessionExpiredError(e)) return
       setEstadoEmail('error')
-      setMensajeEmail(e.message || 'Error al enviar')
+      setMensajeEmail(e.response?.data?.message || e.message || 'Error al enviar')
     } finally {
       setEnviandoCorreo(false)
     }

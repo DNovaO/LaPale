@@ -32,7 +32,7 @@ func (h *Handler) CreateGasto(c *fiber.Ctx) error {
 		return response.Error(c, 400, "body inválido")
 	}
 
-	g, err := h.service.CreateGasto(claims.SucursalID, claims.UserID, req)
+	g, err := h.service.CreateGasto(claims.SucursalID, claims.UserID, claims.Nombre, req)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrMontoInvalido):
@@ -113,6 +113,21 @@ func (h *Handler) GetResumenPeriodo(c *fiber.Ctx) error {
 	return response.Success(c, resumen)
 }
 
+func (h *Handler) GetDetallePaletas(c *fiber.Ctx) error {
+	claims := auth.GetClaims(c)
+	desde := c.Query("desde")
+	hasta := c.Query("hasta")
+
+	detalle, err := h.service.GetDetallePaletas(claims.SucursalID, desde, hasta)
+	if err != nil {
+		if errors.Is(err, ErrDatosRequeridos) {
+			return response.Error(c, 400, "los parámetros 'desde' y 'hasta' son requeridos")
+		}
+		return response.Error(c, 500, "error al obtener detalle de paletas")
+	}
+	return response.Success(c, detalle)
+}
+
 func (h *Handler) GetResumenSemana(c *fiber.Ctx) error {
 	claims := auth.GetClaims(c)
 	resumen, err := h.service.GetResumenSemana(claims.SucursalID)
@@ -131,7 +146,7 @@ func (h *Handler) CerrarCaja(c *fiber.Ctx) error {
 		return response.Error(c, 400, "body inválido")
 	}
 
-	cierre, err := h.service.CerrarCaja(claims.SucursalID, claims.UserID, req)
+	cierre, err := h.service.CerrarCaja(claims.SucursalID, claims.UserID, claims.Nombre, req)
 	if err != nil {
 		return response.Error(c, 500, "error al cerrar caja")
 	}

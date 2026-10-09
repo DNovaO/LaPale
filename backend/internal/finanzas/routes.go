@@ -32,6 +32,10 @@ func RegisterRoutes(router fiber.Router, db *pgxpool.Pool) {
 		auth.RequirePermiso(func(p claims.Permisos) bool { return p.VerReportes }),
 		handler.GetResumenPeriodo,
 	)
+	f.Get("/paletas/detalle",
+		auth.RequirePermiso(func(p claims.Permisos) bool { return p.VerReportes }),
+		handler.GetDetallePaletas,
+	)
 	f.Get("/resumen/semana",
 		auth.RequirePermiso(func(p claims.Permisos) bool { return p.VerReportes }),
 		handler.GetResumenSemana,

@@ -365,9 +365,20 @@ export default function Inventario() {
       <style>{`
         @keyframes modalIn { from{opacity:0;transform:scale(.96)} to{opacity:1;transform:scale(1)} }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+        .inv-tabs { max-width: 100%; }
+        .inv-tabs::-webkit-scrollbar { display: none; }
         @media (max-width: 768px) {
-          .filter-row { flex-direction: column; align-items: stretch !important; }
+          .filter-row { flex-direction: column; align-items: stretch !important; gap: 10px; }
           .filter-row input { width: 100% !important; min-width: 0 !important; }
+          .inv-search { order: -1; width: 100%; }
+          .inv-search input { font-size: 16px !important; padding: 10px 12px 10px 36px !important; }
+          .inv-tabs {
+            width: 100%; max-width: 100%;
+            overflow-x: auto; flex-wrap: nowrap !important;
+            scrollbar-width: none; -ms-overflow-style: none;
+            -webkit-overflow-scrolling: touch;
+          }
+          .inv-tabs button { flex: 0 0 auto; padding: 10px 14px !important; }
         }
         input:-webkit-autofill,
         input:-webkit-autofill:focus,
@@ -421,7 +432,7 @@ export default function Inventario() {
         {/* Filtros + búsqueda */}
         <div className="filter-row" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {/* Tabs */}
-          <div style={{ display: 'flex', gap: 4, background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)', borderRadius: 10, padding: 4 }}>
+          <div className="inv-tabs" style={{ display: 'flex', gap: 4, background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)', borderRadius: 10, padding: 4 }}>
             {TABS.map(t => (
               <button key={t.key} onClick={() => setFiltro(t.key)} style={{
                 padding: '6px 12px', borderRadius: 7, border: 'none', cursor: 'pointer',
@@ -439,7 +450,7 @@ export default function Inventario() {
           </div>
 
           {/* Búsqueda */}
-          <div style={{ position: 'relative', flex: 1, minWidth: 180 }}>
+          <div className="inv-search" style={{ position: 'relative', flex: 1, minWidth: 180 }}>
             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: C.subtext, pointerEvents: 'none' }}>
               <IcSearch />
             </span>

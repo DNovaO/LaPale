@@ -29,4 +29,8 @@ export const usuariosService = {
     const { data } = await client.patch(`/usuarios/${id}/password`, { password })
     return data.data
   },
+  deleteUsuario: async (id) => {
+    const { data } = await client.post(`/usuarios/${id}/eliminar`)
+    return data
+  },
 }

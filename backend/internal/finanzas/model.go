@@ -43,10 +43,11 @@ type ResumenDia struct {
 	TotalEfectivo        float64           `json:"total_efectivo"`
 	TotalTarjeta         float64           `json:"total_tarjeta"`
 	TotalTransferencia   float64           `json:"total_transferencia"`
-	TotalCortesias       float64           `json:"total_cortesias"`
-	NumCortesias         int               `json:"num_cortesias"`
-	TotalGastos          float64           `json:"total_gastos"`
-	Utilidad             float64           `json:"utilidad"`
+	TotalCortesias     float64           `json:"total_cortesias"`
+	NumCortesias       int               `json:"num_cortesias"`
+	PaletasVendidas    float64           `json:"paletas_vendidas"`
+	TotalGastos        float64           `json:"total_gastos"`
+	Utilidad           float64           `json:"utilidad"`
 	ProductosMasVendidos []ProductoVendido `json:"productos_mas_vendidos"`
 }
 
@@ -64,7 +65,15 @@ type ResumenPeriodo struct {
 	NumVentas      int     `json:"num_ventas"`
 	TotalGastos    float64 `json:"total_gastos"`
 	TotalCortesias float64 `json:"total_cortesias"`
+	PaletasVendidas float64 `json:"paletas_vendidas"`
 	Utilidad       float64 `json:"utilidad"`
+}
+
+type DetallePaleta struct {
+	ProductoID string  `json:"producto_id"`
+	Nombre     string  `json:"nombre"`
+	Cantidad   float64 `json:"cantidad"`
+	Total      float64 `json:"total"`
 }
 
 type ResumenDiario struct {

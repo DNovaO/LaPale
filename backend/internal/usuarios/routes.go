@@ -26,4 +26,5 @@ func RegisterRoutes(router fiber.Router, db *pgxpool.Pool) {
 	u.Put("/:id", handler.Update)
 	u.Patch("/:id/estado", handler.UpdateEstado)
 	u.Patch("/:id/password", handler.ChangePassword)
+	u.Post("/:id/eliminar", handler.Delete)
 }

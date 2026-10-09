@@ -20,21 +20,21 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 
 func (r *Repository) CreateGasto(g *Gasto) error {
 	return r.db.QueryRow(context.Background(), `
-		INSERT INTO gastos (sucursal_id, usuario_id, tipo, monto, descripcion, observaciones, fecha)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)
+		INSERT INTO gastos (sucursal_id, usuario_id, usuario_nombre, tipo, monto, descripcion, observaciones, fecha)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		RETURNING id, created_at
-	`, g.SucursalID, g.UsuarioID, g.Tipo, g.Monto,
+	`, g.SucursalID, g.UsuarioID, g.UsuarioNombre, g.Tipo, g.Monto,
 		g.Descripcion, g.Observaciones, g.Fecha,
 	).Scan(&g.ID, &g.CreatedAt)
 }
 
 func (r *Repository) FindGastos(filtros FiltrosPeriodo) ([]Gasto, error) {
 	query := `
-		SELECT g.id, g.sucursal_id, g.usuario_id, u.nombre,
+		SELECT g.id, g.sucursal_id, COALESCE(g.usuario_id::text,''), COALESCE(g.usuario_nombre, u.nombre, ''),
 			g.tipo, g.monto, COALESCE(g.descripcion,''),
 			COALESCE(g.observaciones,''), g.fecha::text, g.created_at
 		FROM gastos g
-		JOIN usuarios u ON u.id = g.usuario_id
+		LEFT JOIN usuarios u ON u.id = g.usuario_id
 		WHERE g.sucursal_id = $1
 	`
 	args := []any{filtros.SucursalID}
@@ -132,6 +132,24 @@ func (r *Repository) GetResumenDia(sucursalID, fecha string) (*ResumenDia, error
 		return nil, err
 	}
 
+	// Paletas vendidas del día (unidades, sin cortesías)
+	err = r.db.QueryRow(ctx, `
+		SELECT COALESCE(SUM(dv.cantidad), 0)
+		FROM ventas v
+		JOIN detalle_venta dv ON dv.venta_id = v.id
+		JOIN productos p ON p.id = dv.producto_id
+		WHERE v.sucursal_id=$1
+			AND v.estado='CERRADA'
+			AND v.tipo='NORMAL'
+			AND dv.es_cortesia = false
+			AND LOWER(p.nombre) LIKE '%paleta%'
+			AND (v.created_at AT TIME ZONE 'America/Mexico_City')::date=$2
+	`, sucursalID, fecha,
+	).Scan(&resumen.PaletasVendidas)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+
 	// Gastos del día
 	err = r.db.QueryRow(ctx, `
 		SELECT COALESCE(SUM(monto), 0)
@@ -221,8 +239,58 @@ func (r *Repository) GetResumenPeriodo(filtros FiltrosPeriodo) (*ResumenPeriodo,
 		return nil, err
 	}
 
+	err = r.db.QueryRow(context.Background(), `
+		SELECT COALESCE(SUM(dv.cantidad), 0)
+		FROM ventas v
+		JOIN detalle_venta dv ON dv.venta_id = v.id
+		JOIN productos p ON p.id = dv.producto_id
+		WHERE v.sucursal_id=$1
+			AND v.estado='CERRADA'
+			AND v.tipo='NORMAL'
+			AND dv.es_cortesia = false
+			AND LOWER(p.nombre) LIKE '%paleta%'
+			AND (v.created_at AT TIME ZONE 'America/Mexico_City')::date BETWEEN $2 AND $3
+	`, filtros.SucursalID, filtros.Desde, filtros.Hasta,
+	).Scan(&resumen.PaletasVendidas)
+	if err != nil {
+		return nil, err
+	}
+
 	resumen.Utilidad = resumen.TotalVentas - resumen.TotalGastos
 	return resumen, nil
+}
+
+func (r *Repository) GetDetallePaletas(sucursalID, desde, hasta string) ([]DetallePaleta, error) {
+	rows, err := r.db.Query(context.Background(), `
+		SELECT d.producto_id, p.nombre,
+			COALESCE(SUM(d.cantidad), 0),
+			COALESCE(SUM(d.subtotal), 0)
+		FROM detalle_venta d
+		JOIN ventas v ON v.id = d.venta_id
+		JOIN productos p ON p.id = d.producto_id
+		WHERE v.sucursal_id=$1
+			AND v.estado='CERRADA'
+			AND v.tipo='NORMAL'
+			AND d.es_cortesia = false
+			AND LOWER(p.nombre) LIKE '%paleta%'
+			AND (v.created_at AT TIME ZONE 'America/Mexico_City')::date BETWEEN $2 AND $3
+		GROUP BY d.producto_id, p.nombre
+		ORDER BY SUM(d.cantidad) DESC
+	`, sucursalID, desde, hasta)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var detalle []DetallePaleta
+	for rows.Next() {
+		var dp DetallePaleta
+		if err := rows.Scan(&dp.ProductoID, &dp.Nombre, &dp.Cantidad, &dp.Total); err != nil {
+			return nil, err
+		}
+		detalle = append(detalle, dp)
+	}
+	return detalle, nil
 }
 
 func (r *Repository) GetResumenSemana(sucursalID string) ([]ResumenDiario, error) {
@@ -265,13 +333,13 @@ func (r *Repository) GetResumenSemana(sucursalID string) ([]ResumenDiario, error
 func (r *Repository) CerrarCaja(c *CierreCaja) error {
 	return r.db.QueryRow(context.Background(), `
 		INSERT INTO cierres_caja (
-			sucursal_id, usuario_id,
+			sucursal_id, usuario_id, usuario_nombre,
 			total_efectivo, total_tarjeta, total_transferencia,
 			total_cortesias, num_cortesias,
 			total_gastos, total_ventas, num_ventas, notas, tipo
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 		RETURNING id, fecha_cierre
-	`, c.SucursalID, c.UsuarioID,
+	`, c.SucursalID, c.UsuarioID, c.UsuarioNombre,
 		c.TotalEfectivo, c.TotalTarjeta, c.TotalTransferencia,
 		c.TotalCortesias, c.NumCortesias,
 		c.TotalGastos, c.TotalVentas, c.NumVentas, c.Notas, c.Tipo,

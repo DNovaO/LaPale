@@ -53,7 +53,7 @@ func (s *Service) GetByID(id string) (*Venta, error) {
 	return v, nil
 }
 
-func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest, rolNombre string) (*Venta, error) {
+func (s *Service) Confirmar(sucursalID, vendedorID, vendedorNombre string, req CrearVentaRequest, rolNombre string) (*Venta, error) {
 	if len(req.Detalle) == 0 {
 		return nil, ErrDetalleVacio
 	}
@@ -126,12 +126,13 @@ func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest
 	}
 
 	venta := &Venta{
-		SucursalID: sucursalID,
-		VendedorID: vendedorID,
-		Tipo:       tipo,
-		Estado:     EstadoAbierta,
-		Subtotal:   subtotal,
-		Total:      subtotal,
+		SucursalID:     sucursalID,
+		VendedorID:     vendedorID,
+		VendedorNombre: vendedorNombre,
+		Tipo:           tipo,
+		Estado:         EstadoAbierta,
+		Subtotal:       subtotal,
+		Total:          subtotal,
 	}
 
 	if enviarACaja {
@@ -187,7 +188,7 @@ func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest
 			}, nil
 		}
 
-		cInfo, err := s.cortesias.EvaluarCortesia(ctx, tx, sucursalID, subtotal, vendedorID, venta.ID, getStock)
+		cInfo, err := s.cortesias.EvaluarCortesia(ctx, tx, sucursalID, subtotal, vendedorID, vendedorNombre, venta.ID, getStock)
 		if err != nil && !errors.Is(err, cortesias.ErrLimiteAlcanzado) && !errors.Is(err, cortesias.ErrSinStock) {
 			return nil, err
 		}
@@ -228,7 +229,7 @@ func (s *Service) Confirmar(sucursalID, vendedorID string, req CrearVentaRequest
 	return venta, nil
 }
 
-func (s *Service) Cancelar(id, motivo, usuarioID string) error {
+func (s *Service) Cancelar(id, motivo, usuarioID, usuarioNombre string) error {
 	v, err := s.repo.FindByID(id)
 	if err != nil {
 		return err
@@ -242,7 +243,7 @@ func (s *Service) Cancelar(id, motivo, usuarioID string) error {
 	if v.Estado != EstadoCerrada {
 		return ErrVentaYaCerrada
 	}
-	return s.repo.CancelarVenta(id, motivo, usuarioID)
+	return s.repo.CancelarVenta(id, motivo, usuarioID, usuarioNombre)
 }
 
 func (s *Service) GetTopProductos(sucursalID, fecha string, limite int) ([]TopProducto, error) {
@@ -256,7 +257,7 @@ func (s *Service) GetPendientes(sucursalID string) ([]Venta, error) {
 	return s.repo.FindPendientes(sucursalID)
 }
 
-func (s *Service) Cobrar(ventaID, usuarioID string, pago Pago) (*Venta, error) {
+func (s *Service) Cobrar(ventaID, usuarioID, usuarioNombre string, pago Pago) (*Venta, error) {
 	v, err := s.repo.FindByID(ventaID)
 	if err != nil {
 		return nil, err
@@ -271,7 +272,7 @@ func (s *Service) Cobrar(ventaID, usuarioID string, pago Pago) (*Venta, error) {
 		return nil, ErrMetodoPagoInvalido
 	}
 
-	if err := s.repo.CobrarVenta(ventaID, pago, usuarioID); err != nil {
+	if err := s.repo.CobrarVenta(ventaID, pago, usuarioID, usuarioNombre); err != nil {
 		return nil, err
 	}
 

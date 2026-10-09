@@ -10,6 +10,10 @@ export const finanzasService = {
     const { data } = await client.get(`/finanzas/resumen/periodo?desde=${desde}&hasta=${hasta}`)
     return data.data
   },
+  getDetallePaletas: async (desde, hasta) => {
+    const { data } = await client.get(`/finanzas/paletas/detalle?desde=${desde}&hasta=${hasta}`)
+    return data.data || []
+  },
   getResumenSemana: async () => {
     const { data } = await client.get('/finanzas/resumen/semana')
     return data.data || []

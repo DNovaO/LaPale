@@ -19,12 +19,12 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 
 func (r *Repository) FindAll(filtros FiltrosVenta) ([]Venta, error) {
 	query := `
-		SELECT v.id, v.sucursal_id, v.vendedor_id, u.nombre,
+		SELECT v.id, v.sucursal_id, COALESCE(v.vendedor_id::text,''), COALESCE(v.vendedor_nombre, u.nombre, ''),
 			COALESCE(v.autorizado_por::text,''), v.tipo, v.estado,
 			v.subtotal, v.total, COALESCE(v.notas,''),
 			v.ticket_numero, COALESCE(p.metodo,''), v.created_at, v.updated_at
 		FROM ventas v
-		JOIN usuarios u ON u.id = v.vendedor_id
+		LEFT JOIN usuarios u ON u.id = v.vendedor_id
 		LEFT JOIN pagos p ON p.venta_id = v.id
 		WHERE v.sucursal_id = $1
 	`
@@ -89,12 +89,12 @@ func (r *Repository) FindAll(filtros FiltrosVenta) ([]Venta, error) {
 
 func (r *Repository) FindByID(id string) (*Venta, error) {
 	query := `
-		SELECT v.id, v.sucursal_id, v.vendedor_id, u.nombre,
+		SELECT v.id, v.sucursal_id, COALESCE(v.vendedor_id::text,''), COALESCE(v.vendedor_nombre, u.nombre, ''),
 			COALESCE(v.autorizado_por::text,''), v.tipo, v.estado,
 			v.subtotal, v.total, COALESCE(v.notas,''),
 			v.ticket_numero, v.created_at, v.updated_at
 		FROM ventas v
-		JOIN usuarios u ON u.id = v.vendedor_id
+		LEFT JOIN usuarios u ON u.id = v.vendedor_id
 		WHERE v.id = $1
 	`
 	var v Venta
@@ -192,11 +192,11 @@ func (r *Repository) InsertVenta(ctx context.Context, tx pgx.Tx, v *Venta) error
 	}
 	return tx.QueryRow(ctx, fmt.Sprintf(`
 		INSERT INTO ventas
-			(sucursal_id, vendedor_id, autorizado_por, tipo, estado, subtotal, total, notas)
-		VALUES ($1,$2,%s,$3,$4,$5,$6,$7)
+			(sucursal_id, vendedor_id, vendedor_nombre, autorizado_por, tipo, estado, subtotal, total, notas)
+		VALUES ($1,$2,$3,%s,$4,$5,$6,$7,$8)
 		RETURNING id, ticket_numero, created_at, updated_at
 	`, autorizadoPor),
-		v.SucursalID, v.VendedorID, v.Tipo, v.Estado, v.Subtotal, v.Total, v.Notas,
+		v.SucursalID, v.VendedorID, v.VendedorNombre, v.Tipo, v.Estado, v.Subtotal, v.Total, v.Notas,
 	).Scan(&v.ID, &v.TicketNumero, &v.CreatedAt, &v.UpdatedAt)
 }
 
@@ -254,9 +254,9 @@ func (r *Repository) InsertDetalleYDescontar(ctx context.Context, tx pgx.Tx, v *
 		}
 		_, err = tx.Exec(ctx, `
 			INSERT INTO movimientos_inventario
-				(producto_id, usuario_id, tipo, cantidad, stock_antes, stock_despues, referencia_id, observaciones)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-		`, d.ProductoID, v.VendedorID, tipoMov, -consumo,
+				(producto_id, usuario_id, usuario_nombre, tipo, cantidad, stock_antes, stock_despues, referencia_id, observaciones)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		`, d.ProductoID, v.VendedorID, v.VendedorNombre, tipoMov, -consumo,
 			ps.stock, nuevoStock, v.ID,
 			fmt.Sprintf("Venta #%d", v.TicketNumero),
 		)
@@ -331,7 +331,7 @@ func (r *Repository) GetProductosParaVenta(ids []string) (map[string]productoSto
 	return result, nil
 }
 
-func (r *Repository) CancelarVenta(id, motivo, usuarioID string) error {
+func (r *Repository) CancelarVenta(id, motivo, usuarioID, usuarioNombre string) error {
 	ctx := context.Background()
 	tx, err := r.Db.Begin(ctx)
 	if err != nil {
@@ -384,9 +384,9 @@ func (r *Repository) CancelarVenta(id, motivo, usuarioID string) error {
 
 		_, err = tx.Exec(ctx, `
 			INSERT INTO movimientos_inventario
-				(producto_id, usuario_id, tipo, cantidad, stock_antes, stock_despues, referencia_id, observaciones)
-			VALUES ($1,$2,'ENTRADA',$3,$4,$5,$6,$7)
-		`, it.productoID, usuarioID, it.cantidad, stockActual, nuevoStock, id,
+				(producto_id, usuario_id, usuario_nombre, tipo, cantidad, stock_antes, stock_despues, referencia_id, observaciones)
+			VALUES ($1,$2,$3,'ENTRADA',$4,$5,$6,$7,$8)
+		`, it.productoID, usuarioID, usuarioNombre, it.cantidad, stockActual, nuevoStock, id,
 			"Reverso por cancelación de venta: "+motivo,
 		)
 		if err != nil {
@@ -440,12 +440,12 @@ func (r *Repository) GetTopProductos(sucursalID, fecha string, limite int) ([]To
 
 func (r *Repository) FindPendientes(sucursalID string) ([]Venta, error) {
 	rows, err := r.Db.Query(context.Background(), `
-		SELECT v.id, v.sucursal_id, v.vendedor_id, u.nombre,
+		SELECT v.id, v.sucursal_id, COALESCE(v.vendedor_id::text,''), COALESCE(v.vendedor_nombre, u.nombre, ''),
 			COALESCE(v.autorizado_por::text,''), v.tipo, v.estado,
 			v.subtotal, v.total, COALESCE(v.notas,''),
 			v.ticket_numero, v.created_at, v.updated_at
 		FROM ventas v
-		JOIN usuarios u ON u.id = v.vendedor_id
+		LEFT JOIN usuarios u ON u.id = v.vendedor_id
 		WHERE v.sucursal_id = $1
 			AND v.estado = 'ABIERTA'
 			AND (v.created_at AT TIME ZONE 'America/Mexico_City')::date = CURRENT_DATE
@@ -477,7 +477,7 @@ func (r *Repository) FindPendientes(sucursalID string) ([]Venta, error) {
 	return ventas, nil
 }
 
-func (r *Repository) CobrarVenta(ventaID string, pago Pago, usuarioID string) error {
+func (r *Repository) CobrarVenta(ventaID string, pago Pago, usuarioID, usuarioNombre string) error {
 	ctx := context.Background()
 	tx, err := r.Db.Begin(ctx)
 	if err != nil {
@@ -538,9 +538,9 @@ func (r *Repository) CobrarVenta(ventaID string, pago Pago, usuarioID string) er
 		}
 		_, err = tx.Exec(ctx, `
 			INSERT INTO movimientos_inventario
-				(producto_id, usuario_id, tipo, cantidad, stock_antes, stock_despues, referencia_id, observaciones)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		`, it.productoID, usuarioID, tipoMov, -it.cantidad, stockActual, nuevoStock, ventaID,
+				(producto_id, usuario_id, usuario_nombre, tipo, cantidad, stock_antes, stock_despues, referencia_id, observaciones)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		`, it.productoID, usuarioID, usuarioNombre, tipoMov, -it.cantidad, stockActual, nuevoStock, ventaID,
 			fmt.Sprintf("Cobro de venta #%s", ventaID),
 		)
 		if err != nil {

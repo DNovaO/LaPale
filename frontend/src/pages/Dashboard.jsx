@@ -11,6 +11,7 @@ const IcCard = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
 const IcGift = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
 const IcTransfer = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
 const IcRefresh = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+const IcPaleta = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v9"/><path d="M9 2h6a3 3 0 0 1 3 3v6a6 6 0 0 1-12 0V5a3 3 0 0 1 3-3z"/><line x1="12" y1="17" x2="12" y2="22"/></svg>
 
 const fmt = n => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2 }).format(n || 0)
 const fmtNum = n => new Intl.NumberFormat('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0)
@@ -373,6 +374,7 @@ export default function Dashboard() {
           <MetricCard label="Tarjeta" value={fmt(resumen?.total_tarjeta)} icon={IcCard} accent="#237AAA" isDark={isDark} loading={loading}/>
           <MetricCard label="Transferencia" value={fmt(resumen?.total_transferencia)} icon={IcTransfer} accent="#8A6A4A" isDark={isDark} loading={loading}/>
           <MetricCard label="Cortesías" value={resumen?.num_cortesias ?? 0} icon={IcGift} accent="#E72D8B" isDark={isDark} loading={loading}/>
+          <MetricCard label="Paletas vendidas" value={fmtNum(resumen?.paletas_vendidas)} icon={IcPaleta} accent="#00753F" isDark={isDark} loading={loading}/>
         </div>
 
         {/* Row 1: Mix de pagos | Ingresos/Gastos | Ventas x hora */}

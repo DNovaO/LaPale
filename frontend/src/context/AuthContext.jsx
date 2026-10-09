@@ -1,4 +1,7 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useState, useEffect } from 'react'
+import client from '@/api/client'
+import { clearPosDraft } from '@/posDraft'
+import { clearActivity, clearSessionRedirectFlag, startSessionWatch, touchActivity } from '@/session'
 
 const AuthContext = createContext(null)
 
@@ -9,31 +12,32 @@ export function AuthProvider({ children }) {
       return saved ? JSON.parse(saved) : null
     } catch { return null }
   })
-  const [token, setToken]   = useState(() => {
-    const savedToken = localStorage.getItem('token')
-    // Si hay token guardado, actualizar IP de impresora en background
-    if (savedToken) {
-      fetch('/api/update-printer-ip', {
-        headers: { Authorization: `Bearer ${savedToken}` }
-      }).catch(() => {})
-    }
-    return savedToken
-  })
+  const [token, setToken]   = useState(() => localStorage.getItem('token'))
   const [loading]           = useState(false)
 
+  useEffect(() => {
+    startSessionWatch()
+    if (localStorage.getItem('token')) {
+      touchActivity()
+      client.get('/update-printer-ip').catch(() => {})
+    }
+  }, [])
+
   const login = async (data) => {
+    clearSessionRedirectFlag()
     setToken(data.token)
     setUser(data.user)
     localStorage.setItem('token', data.token)
     localStorage.setItem('user', JSON.stringify(data.user))
+    touchActivity()
 
     // Actualizar IP de la impresora automáticamente al hacer login
     try {
-      await fetch('/api/update-printer-ip', {
-        headers: { Authorization: `Bearer ${data.token}` }
-      })
+      await client.get('/update-printer-ip')
     } catch (e) {
-      console.warn('No se pudo actualizar IP impresora:', e)
+      if (e?.response?.status !== 401) {
+        console.warn('No se pudo actualizar IP impresora:', e)
+      }
     }
   }
 
@@ -42,6 +46,8 @@ export function AuthProvider({ children }) {
     setUser(null)
     localStorage.removeItem('token')
     localStorage.removeItem('user')
+    clearPosDraft()
+    clearActivity()
   }
 
   return (

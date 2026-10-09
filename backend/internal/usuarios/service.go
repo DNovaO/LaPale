@@ -11,6 +11,8 @@ var (
 	ErrUsernameOcupado     = errors.New("el username ya está en uso")
 	ErrDatosRequeridos     = errors.New("faltan datos requeridos")
 	ErrPasswordMuyCorto    = errors.New("la contraseña debe tener al menos 6 caracteres")
+	ErrAutoEliminacion     = errors.New("no puedes eliminar tu propia cuenta")
+	ErrUltimoAdmin         = errors.New("no se puede eliminar al último administrador activo")
 )
 
 type Service struct {
@@ -97,6 +99,29 @@ func (s *Service) UpdateEstado(id string, activo bool) error {
 		return ErrUsuarioNoEncontrado
 	}
 	return s.repo.UpdateEstado(id, activo)
+}
+
+func (s *Service) Delete(id, actorID string) error {
+	u, err := s.repo.FindByID(id)
+	if err != nil {
+		return err
+	}
+	if u == nil {
+		return ErrUsuarioNoEncontrado
+	}
+	if id == actorID {
+		return ErrAutoEliminacion
+	}
+	if u.RolNombre == "administrador" && u.Activo {
+		restantes, err := s.repo.ContarAdminsActivosExcepto(u.SucursalID, id)
+		if err != nil {
+			return err
+		}
+		if restantes == 0 {
+			return ErrUltimoAdmin
+		}
+	}
+	return s.repo.DeleteUsuario(id)
 }
 
 func (s *Service) ChangePassword(id string, req ChangePasswordRequest) error {

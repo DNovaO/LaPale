@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import { authService } from '@/services/auth.service'
+import { SESSION_EXPIRED_MESSAGE, clearSessionRedirectFlag } from '@/session'
 
 const IcSun = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -67,6 +68,14 @@ export default function Login() {
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
   const [focused, setFocused]   = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const sesionExpirada = searchParams.get('session') === 'expired'
+
+  useEffect(() => {
+    if (!sesionExpirada) return
+    clearSessionRedirectFlag()
+    setSearchParams({}, { replace: true })
+  }, [sesionExpirada, setSearchParams])
 
   const isDark = theme === 'dark'
 
@@ -250,6 +259,23 @@ export default function Login() {
               Ingresa tus credenciales para continuar
             </p>
           </div>
+
+          {sesionExpirada && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 14px', borderRadius: 12, marginBottom: 16,
+              background: 'rgba(35,122,170,0.08)',
+              border: '1.5px solid rgba(35,122,170,0.25)',
+            }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: '#237AAA', flexShrink: 0,
+              }}/>
+              <p style={{ fontSize: 12, color: isDark ? '#F1F6F6' : '#0C0F14', fontWeight: 500, margin: 0 }}>
+                {SESSION_EXPIRED_MESSAGE}
+              </p>
+            </div>
+          )}
 
           {/* Formulario */}
           <form onSubmit={submit} noValidate>

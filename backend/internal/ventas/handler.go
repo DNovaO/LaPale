@@ -59,7 +59,7 @@ func (h *Handler) Confirmar(c *fiber.Ctx) error {
 		return response.Error(c, 400, "body inválido")
 	}
 
-	venta, err := h.service.Confirmar(claims.SucursalID, claims.UserID, req, claims.RolNombre)
+	venta, err := h.service.Confirmar(claims.SucursalID, claims.UserID, claims.Nombre, req, claims.RolNombre)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrDetalleVacio):
@@ -119,7 +119,7 @@ func (h *Handler) Cancelar(c *fiber.Ctx) error {
 		return response.Error(c, 400, "body inválido")
 	}
 
-	if err := h.service.Cancelar(c.Params("id"), req.Motivo, claims.UserID); err != nil {
+	if err := h.service.Cancelar(c.Params("id"), req.Motivo, claims.UserID, claims.Nombre); err != nil {
 		switch {
 		case errors.Is(err, ErrVentaNoEncontrada):
 			return response.Error(c, 404, "venta no encontrada")
@@ -188,7 +188,7 @@ func (h *Handler) Cobrar(c *fiber.Ctx) error {
 		MontoRecibido: req.MontoRecibido,
 	}
 
-	v, err := h.service.Cobrar(c.Params("id"), claims.UserID, pago)
+	v, err := h.service.Cobrar(c.Params("id"), claims.UserID, claims.Nombre, pago)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrVentaNoEncontrada):

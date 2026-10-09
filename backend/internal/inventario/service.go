@@ -45,7 +45,7 @@ func (s *Service) GetByID(id string) (*Producto, error) {
 	return p, nil
 }
 
-func (s *Service) Create(sucursalID, usuarioID string, req CreateProductoRequest) (*Producto, error) {
+func (s *Service) Create(sucursalID, usuarioID, usuarioNombre string, req CreateProductoRequest) (*Producto, error) {
 	if req.Nombre == "" {
 		return nil, ErrDatosRequeridos
 	}
@@ -95,6 +95,7 @@ func (s *Service) Create(sucursalID, usuarioID string, req CreateProductoRequest
 		_ = s.repo.RegistrarMovimiento(&Movimiento{
 			ProductoID:    p.ID,
 			UsuarioID:     usuarioID,
+			UsuarioNombre: usuarioNombre,
 			Tipo:          TipoEntrada,
 			Cantidad:      req.StockInicial,
 			Observaciones: "Stock inicial al crear producto",
@@ -145,7 +146,7 @@ func (s *Service) Delete(id string) error {
 
 // ── Movimientos ──────────────────────────────────────────────
 
-func (s *Service) RegistrarMovimiento(usuarioID string, req MovimientoRequest) (*Movimiento, error) {
+func (s *Service) RegistrarMovimiento(usuarioID, usuarioNombre string, req MovimientoRequest) (*Movimiento, error) {
 	if req.Cantidad <= 0 {
 		return nil, ErrCantidadInvalida
 	}
@@ -173,6 +174,7 @@ func (s *Service) RegistrarMovimiento(usuarioID string, req MovimientoRequest) (
 	m := &Movimiento{
 		ProductoID:    req.ProductoID,
 		UsuarioID:     usuarioID,
+		UsuarioNombre: usuarioNombre,
 		Tipo:          req.Tipo,
 		Cantidad:      cantidad,
 		Observaciones: req.Observaciones,

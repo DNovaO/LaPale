@@ -30,6 +30,11 @@ const IcX = () => (
     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
   </svg>
 )
+const IcTrash = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+  </svg>
+)
 const IcSearch = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -108,6 +113,9 @@ export default function Usuarios() {
   const [modalPassword, setModalPassword] = useState(null)
   const [newPassword, setNewPassword] = useState('')
   const [savingPass, setSavingPass] = useState(false)
+
+  const [modalEliminar, setModalEliminar] = useState(null)
+  const [eliminando, setEliminando] = useState(false)
 
   const C = {
     text:    isDark ? '#F1F6F6' : '#0C0F14',
@@ -210,6 +218,20 @@ export default function Usuarios() {
     } catch {}
   }
 
+  const eliminarUsuario = async () => {
+    if (!modalEliminar) return
+    setEliminando(true); setError('')
+    try {
+      await usuariosService.deleteUsuario(modalEliminar.id)
+      setModalEliminar(null)
+      fetchData()
+    } catch (e) {
+      setError(e.response?.data?.message || 'Error al eliminar')
+    } finally {
+      setEliminando(false)
+    }
+  }
+
   const changePassword = async () => {
     if (!newPassword || newPassword.length < 6) return setError('La contraseña debe tener al menos 6 caracteres')
     setSavingPass(true); setError('')
@@ -229,6 +251,9 @@ export default function Usuarios() {
     { key: 'activos', label: 'Activos', count: usuarios.filter(u => u.activo).length },
     { key: 'inactivos', label: 'Inactivos', count: usuarios.filter(u => !u.activo).length },
   ]
+
+  const GRID_COLS = 'minmax(180px,1.7fr) minmax(140px,1.3fr) minmax(110px,0.9fr) minmax(120px,1fr) 110px 152px'
+  const HEADERS = ['Nombre', 'Username', 'Rol', 'Sucursal', 'Estado', 'Acciones']
 
   return (
     <>
@@ -332,36 +357,42 @@ export default function Usuarios() {
           borderRadius: 16, overflow: 'hidden', overflowX: 'auto',
           boxShadow: isDark ? '0 4px 20px -4px rgba(0,0,0,0.4)' : '0 4px 16px -4px rgba(29,84,125,0.08)',
         }}>
-          <div style={{ minWidth: 620 }}>
+          <div style={{ minWidth: 880 }}>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '2fr 1.5fr 1fr 1fr 100px 120px',
-            padding: '10px 20px',
+            gridTemplateColumns: GRID_COLS,
+            padding: '14px 24px',
+            columnGap: 16,
+            alignItems: 'center',
             borderBottom: `1px solid ${C.border}`,
             background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(29,84,125,0.03)',
           }}>
-            {['Nombre', 'Username', 'Rol', 'Sucursal', 'Estado', 'Acciones'].map(h => (
-              <span key={h} style={{ fontSize: 11, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>{h}</span>
+            {HEADERS.map(h => (
+              <span key={h} style={{
+                fontSize: 11, fontWeight: 600, color: C.subtext,
+                textTransform: 'uppercase', letterSpacing: '.05em',
+                whiteSpace: 'nowrap', textAlign: h === 'Acciones' ? 'right' : 'left',
+              }}>{h}</span>
             ))}
           </div>
 
           {loading ? (
             Array(5).fill(0).map((_, i) => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1fr 1fr 100px 120px', padding: '14px 20px', borderBottom: `1px solid ${C.border}`, gap: 12 }}>
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: GRID_COLS, padding: '16px 24px', borderBottom: `1px solid ${C.border}`, columnGap: 16, alignItems: 'center' }}>
                 {Array(6).fill(0).map((_, j) => (
                   <div key={j} style={{ height: 14, borderRadius: 6, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', animation: 'pulse 1.5s ease-in-out infinite' }}/>
                 ))}
               </div>
             ))
           ) : usuariosFiltrados.length === 0 ? (
-            <div style={{ padding: '40px 20px', textAlign: 'center', color: C.subtext, fontSize: 13 }}>
+            <div style={{ padding: '48px 24px', textAlign: 'center', color: C.subtext, fontSize: 13 }}>
               {search ? `Sin resultados para "${search}"` : 'Sin usuarios en esta categoría'}
             </div>
           ) : (
             usuariosFiltrados.map((u, i) => (
               <div key={u.id} style={{
-                display: 'grid', gridTemplateColumns: '2fr 1.5fr 1fr 1fr 100px 120px',
-                padding: '12px 20px', alignItems: 'center',
+                display: 'grid', gridTemplateColumns: GRID_COLS,
+                padding: '16px 24px', alignItems: 'center', columnGap: 16,
                 borderBottom: i < usuariosFiltrados.length - 1 ? `1px solid ${C.border}` : 'none',
                 transition: 'background .15s',
                 opacity: u.activo ? 1 : 0.5,
@@ -369,27 +400,29 @@ export default function Usuarios() {
               onMouseEnter={e => e.currentTarget.style.background = C.hover}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               >
-                <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{u.nombre}</span>
-                <span style={{ fontSize: 13, color: C.subtext }}>@{u.username}</span>
-                <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 20,
+                <span style={{ fontSize: 13, fontWeight: 500, color: C.text, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4 }}>{u.nombre}</span>
+                <span style={{ fontSize: 13, color: C.subtext, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4 }}>@{u.username}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
                   background: u.rol === 'administrador' ? 'rgba(231,45,139,0.12)' : 'rgba(35,122,170,0.12)',
                   color: u.rol === 'administrador' ? '#E72D8B' : '#237AAA',
-                  display: 'inline-block', width: 'fit-content',
+                  display: 'inline-block', width: 'fit-content', maxWidth: '100%',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', justifySelf: 'start',
                 }}>
                   {u.rol}
                 </span>
-                <span style={{ fontSize: 13, color: C.subtext }}>{u.sucursal || '—'}</span>
+                <span style={{ fontSize: 13, color: C.subtext, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4 }}>{u.sucursal || '—'}</span>
                 <span style={{
-                  fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 20,
+                  fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
                   background: u.activo ? 'rgba(182,205,56,0.12)' : 'rgba(138,106,74,0.12)',
                   color: u.activo ? '#B6CD38' : '#8A6A4A',
                   display: 'inline-block', width: 'fit-content',
+                  whiteSpace: 'nowrap', justifySelf: 'start',
                 }}>
                   {u.activo ? 'Activo' : 'Inactivo'}
                 </span>
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 8, justifySelf: 'end' }}>
                   <button title="Editar" onClick={() => abrirEditar(u)} style={{
-                    padding: '6px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    padding: '7px', borderRadius: 8, border: 'none', cursor: 'pointer',
                     background: 'rgba(182,205,56,0.12)', color: '#B6CD38',
                     display: 'flex', transition: 'background .15s',
                   }}
@@ -399,7 +432,7 @@ export default function Usuarios() {
                     <IcEdit />
                   </button>
                   <button title="Cambiar contraseña" onClick={() => { setModalPassword(u); setNewPassword(''); setError('') }} style={{
-                    padding: '6px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    padding: '7px', borderRadius: 8, border: 'none', cursor: 'pointer',
                     background: 'rgba(35,122,170,0.12)', color: '#237AAA',
                     display: 'flex', transition: 'background .15s',
                   }}
@@ -409,12 +442,22 @@ export default function Usuarios() {
                     <IcKey />
                   </button>
                   <button title={u.activo ? 'Desactivar' : 'Activar'} onClick={() => toggleActivo(u)} style={{
-                    padding: '6px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    padding: '7px', borderRadius: 8, border: 'none', cursor: 'pointer',
                     background: u.activo ? 'rgba(231,45,139,0.10)' : 'rgba(0,117,63,0.10)',
                     color: u.activo ? '#E72D8B' : '#00753F',
                     display: 'flex', transition: 'background .15s',
                   }}>
                     <IcToggle active={u.activo} />
+                  </button>
+                  <button title="Eliminar" onClick={() => { setModalEliminar(u); setError('') }} style={{
+                    padding: '7px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    background: 'rgba(231,45,139,0.10)', color: '#E72D8B',
+                    display: 'flex', transition: 'background .15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(231,45,139,0.22)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(231,45,139,0.10)'}
+                  >
+                    <IcTrash />
                   </button>
                 </div>
               </div>
@@ -528,6 +571,41 @@ export default function Usuarios() {
               fontFamily: 'inherit', opacity: savingPass ? .7 : 1,
             }}>
               {savingPass ? 'Actualizando...' : 'Cambiar contraseña'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal - Confirmar eliminación */}
+      <Modal open={!!modalEliminar} onClose={() => setModalEliminar(null)} title="Eliminar usuario" isDark={isDark}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <p style={{ margin: 0, fontSize: 13, color: C.subtext }}>
+            ¿Estás seguro de eliminar a <strong style={{ color: C.text }}>{modalEliminar?.nombre}</strong> (@{modalEliminar?.username})?
+          </p>
+          <p style={{ margin: 0, fontSize: 12, color: '#E72D8B', padding: '8px 12px', borderRadius: 8, background: 'rgba(231,45,139,0.08)', border: '1px solid rgba(231,45,139,0.2)' }}>
+            Esta acción no se puede deshacer. Su nombre se conservará en el historial de ventas y movimientos.
+          </p>
+          {error && (
+            <p style={{ margin: 0, fontSize: 12, color: '#E72D8B', padding: '8px 12px', borderRadius: 8, background: 'rgba(231,45,139,0.08)', border: '1px solid rgba(231,45,139,0.2)' }}>
+              {error}
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+            <button onClick={() => { setModalEliminar(null); setError('') }} style={{
+              flex: 1, padding: '10px', borderRadius: 10, border: `1px solid ${isDark ? 'rgba(35,122,170,0.3)' : 'rgba(29,84,125,0.2)'}`,
+              background: 'transparent', color: isDark ? '#237AAA' : '#1D547D',
+              fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
+            }}>
+              Cancelar
+            </button>
+            <button onClick={eliminarUsuario} disabled={eliminando} style={{
+              flex: 2, padding: '10px', borderRadius: 10, border: 'none',
+              background: 'linear-gradient(135deg, #E72D8B 0%, #c0206e 100%)',
+              color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              fontFamily: 'inherit', opacity: eliminando ? .7 : 1,
+              boxShadow: '0 4px 12px -4px rgba(231,45,139,0.4)',
+            }}>
+              {eliminando ? 'Eliminando...' : 'Eliminar usuario'}
             </button>
           </div>
         </div>

@@ -58,6 +58,7 @@ const IcPDF = () => (
 )
 
 const fmt = n => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n || 0)
+const fmtNum = n => new Intl.NumberFormat('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0)
 const today = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
@@ -204,6 +205,11 @@ function DateInput({ value, onChange, style, isDark, placeholder = 'DD/MM/AAAA' 
     setOpen(o => !o)
   }
 
+  const openCalendar = () => {
+    setView(parseIso(value))
+    setOpen(true)
+  }
+
   const selectDay = (day) => {
     const y = view.getFullYear()
     const m = String(view.getMonth() + 1).padStart(2, '0')
@@ -244,9 +250,10 @@ function DateInput({ value, onChange, style, isDark, placeholder = 'DD/MM/AAAA' 
           inputMode="numeric"
           value={text}
           onChange={handleChange}
+          onFocus={openCalendar}
           onBlur={handleBlur}
           placeholder={placeholder}
-          style={{ ...style, paddingRight: 36, width: '100%', boxSizing: 'border-box' }}
+          style={{ ...style, paddingRight: 36, width: '100%', boxSizing: 'border-box', cursor: 'pointer' }}
         />
         <button type="button" onClick={openCal} title="Abrir calendario" style={{
           position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
@@ -315,8 +322,10 @@ export default function Finanzas() {
 
   const [tab, setTab] = useState('resumen')
   const [fecha, setFecha] = useState(today())
-  const [desde, setDesde] = useState(today())
-  const [hasta, setHasta] = useState(today())
+  const [rangoDesde, setRangoDesde] = useState(today())
+  const [rangoHasta, setRangoHasta] = useState(today())
+  const [gastoDesde, setGastoDesde] = useState(today())
+  const [gastoHasta, setGastoHasta] = useState(today())
 
   const [resumenDia, setResumenDia] = useState(null)
   const [resumenPeriodo, setResumenPeriodo] = useState(null)
@@ -325,6 +334,9 @@ export default function Finanzas() {
   const [loading, setLoading] = useState(true)
   const [mejorVendedor, setMejorVendedor] = useState(null)
   const [horaPico, setHoraPico] = useState(null)
+  const [detallePaletas, setDetallePaletas] = useState([])
+  const [mostrarDetallePaletas, setMostrarDetallePaletas] = useState(false)
+  const [cargandoDetalle, setCargandoDetalle] = useState(false)
 
   const [modalGasto, setModalGasto] = useState(false)
   const [formGasto, setFormGasto] = useState({ tipo: 'OTRO', monto: '', descripcion: '', observaciones: '', fecha: today() })
@@ -345,41 +357,53 @@ export default function Finanzas() {
     inputBg: isDark ? 'rgba(255,255,255,0.04)' : '#f0f6f9',
   }
 
-  const fetchData = useCallback(async () => {
+  const fetchDia = useCallback(async () => {
     setLoading(true)
     try {
-      if (tab === 'resumen') {
-        const [dia, periodo] = await Promise.all([
-          finanzasService.getResumenDia(fecha).catch(() => null),
-          finanzasService.getResumenPeriodo(desde, hasta).catch(() => null),
-        ])
-        setResumenDia(dia)
-        setResumenPeriodo(periodo)
+      const dia = await finanzasService.getResumenDia(fecha).catch(() => null)
+      setResumenDia(dia)
 
-        const esUnDia = desde === hasta
-        const params = { estado: 'CERRADA', limite: 500 }
-        if (esUnDia) params.fecha = fecha
-        const vs = await ventasService.getVentas(params).catch(() => [])
+      const vs = await ventasService.getVentas({ estado: 'CERRADA', limite: 500, fecha }).catch(() => [])
 
-        const sellerMap = {}
-        vs.forEach(v => { sellerMap[v.vendedor_nombre] = (sellerMap[v.vendedor_nombre] || 0) + v.total })
-        const top = Object.entries(sellerMap).sort((a, b) => b[1] - a[1])
-        setMejorVendedor(top.length > 0 ? { nombre: top[0][0], total: top[0][1] } : null)
+      const sellerMap = {}
+      vs.forEach(v => { sellerMap[v.vendedor_nombre] = (sellerMap[v.vendedor_nombre] || 0) + v.total })
+      const top = Object.entries(sellerMap).sort((a, b) => b[1] - a[1])
+      setMejorVendedor(top.length > 0 ? { nombre: top[0][0], total: top[0][1] } : null)
 
-        if (esUnDia) {
-          const hours = Array(12).fill(0)
-          vs.forEach(v => {
-            const h = new Date(v.created_at).getHours()
-            if (h >= 10 && h <= 21) hours[h - 10] += v.total
-          })
-          let maxH = -1, maxV = 0
-          hours.forEach((v, i) => { if (v > maxV) { maxV = v; maxH = i + 10 } })
-          setHoraPico(maxV > 0 ? { hora: `${maxH}h`, total: maxV } : null)
-        } else {
-          setHoraPico(null)
-        }
-      } else if (tab === 'gastos') {
-        const data = await finanzasService.getGastos({ desde, hasta }).catch(() => [])
+      const hours = Array(12).fill(0)
+      vs.forEach(v => {
+        const h = new Date(v.created_at).getHours()
+        if (h >= 10 && h <= 21) hours[h - 10] += v.total
+      })
+      let maxH = -1, maxV = 0
+      hours.forEach((v, i) => { if (v > maxV) { maxV = v; maxH = i + 10 } })
+      setHoraPico(maxV > 0 ? { hora: `${maxH}h`, total: maxV } : null)
+    } finally {
+      setLoading(false)
+    }
+  }, [fecha])
+
+  const fetchPeriodo = useCallback(async () => {
+    setLoading(true)
+    try {
+      const periodo = await finanzasService.getResumenPeriodo(rangoDesde, rangoHasta).catch(() => null)
+      setResumenPeriodo(periodo)
+      setMostrarDetallePaletas(false)
+      setDetallePaletas([])
+    } finally {
+      setLoading(false)
+    }
+  }, [rangoDesde, rangoHasta])
+
+  const fetchData = useCallback(async () => {
+    if (tab === 'resumen') {
+      await Promise.all([fetchDia(), fetchPeriodo()])
+      return
+    }
+    setLoading(true)
+    try {
+      if (tab === 'gastos') {
+        const data = await finanzasService.getGastos({ desde: gastoDesde, hasta: gastoHasta }).catch(() => [])
         setGastos(data || [])
       } else if (tab === 'caja') {
         const data = await finanzasService.getCierres().catch(() => [])
@@ -388,9 +412,26 @@ export default function Finanzas() {
     } finally {
       setLoading(false)
     }
-  }, [tab, fecha, desde, hasta])
+  }, [tab, fetchDia, fetchPeriodo, gastoDesde, gastoHasta])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  useEffect(() => { setMostrarDetallePaletas(false); setDetallePaletas([]) }, [rangoDesde, rangoHasta])
+
+  const cargarDetallePaletas = async () => {
+    if (mostrarDetallePaletas) {
+      setMostrarDetallePaletas(false)
+      return
+    }
+    setCargandoDetalle(true)
+    try {
+      const data = await finanzasService.getDetallePaletas(rangoDesde, rangoHasta).catch(() => [])
+      setDetallePaletas(data || [])
+      setMostrarDetallePaletas(true)
+    } finally {
+      setCargandoDetalle(false)
+    }
+  }
 
   const handleCreateGasto = async () => {
     if (!formGasto.monto || isNaN(formGasto.monto) || Number(formGasto.monto) <= 0)
@@ -650,6 +691,23 @@ export default function Finanzas() {
           .finanzas-tabs button { flex: 1; text-align: center; white-space: nowrap; }
           .finanzas-filter { flex-direction: column !important; align-items: stretch !important; }
         }
+        .fin-card-head { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; }
+        .fin-card-head .fin-dates { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+        .fin-grid-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+        .fin-table-scroll { -webkit-overflow-scrolling: touch; }
+        @media (max-width: 640px) {
+          .fin-card-head { flex-direction: column; align-items: stretch; }
+          .fin-card-head > h2 { order: -1; }
+          .fin-card-head .fin-dates { display: grid; grid-template-columns: 1fr 1fr; }
+          .fin-card-head .fin-dates button { grid-column: 1 / -1; width: 100%; justify-content: center; }
+          .fin-grid-metrics { grid-template-columns: 1fr 1fr; gap: 10px; }
+          .fin-grid-metrics > div { padding: 12px !important; }
+          .fin-grid-metrics > div p { font-size: 15px !important; }
+        }
+        @media (max-width: 380px) {
+          .fin-grid-metrics { grid-template-columns: 1fr; }
+          .fin-card-head .fin-dates { grid-template-columns: 1fr; }
+        }
       `}</style>
 
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
@@ -683,50 +741,129 @@ export default function Finanzas() {
         {/* Tab: Resumen */}
         {tab === 'resumen' && (
           <>
-            <div className="fade-in finanzas-filter" style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Día</span>
-                <DateInput value={fecha} onChange={setFecha} isDark={isDark} style={{
-                  padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
-                  fontFamily: 'inherit', background: C.card, color: C.text,
-                  border: `1px solid ${C.border}`,
-                }} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Desde</span>
-                <DateInput value={desde} onChange={setDesde} isDark={isDark} style={{
-                  padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
-                  fontFamily: 'inherit', background: C.card, color: C.text,
-                  border: `1px solid ${C.border}`,
-                }} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Hasta</span>
-                <DateInput value={hasta} onChange={setHasta} isDark={isDark} style={{
-                  padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
-                  fontFamily: 'inherit', background: C.card, color: C.text,
-                  border: `1px solid ${C.border}`,
-                }} />
-              </div>
-              <button onClick={fetchData} style={{
-                marginTop: 16, display: 'flex', alignItems: 'center', gap: 6,
-                padding: '8px 14px', borderRadius: 10,
-                border: `1px solid ${C.border}`, background: C.card, color: C.subtext,
-                fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+            {!loading && resumenPeriodo && (
+              <div className="fade-in" style={{
+                background: C.card, border: `1px solid ${C.border}`,
+                borderRadius: 16, padding: '20px 24px', marginBottom: 20,
+                boxShadow: isDark ? '0 4px 20px -4px rgba(0,0,0,0.4)' : '0 4px 16px -4px rgba(29,84,125,0.08)',
               }}>
-                <IcRefresh /> Actualizar
-              </button>
-            </div>
+                <div className="fin-card-head" style={{ marginBottom: 16 }}>
+                  <div className="fin-dates">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Desde</span>
+                      <DateInput value={rangoDesde} onChange={setRangoDesde} isDark={isDark} style={{
+                        padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
+                        fontFamily: 'inherit', background: C.inputBg, color: C.text,
+                        border: `1px solid ${C.border}`,
+                      }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Hasta</span>
+                      <DateInput value={rangoHasta} onChange={setRangoHasta} isDark={isDark} style={{
+                        padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
+                        fontFamily: 'inherit', background: C.inputBg, color: C.text,
+                        border: `1px solid ${C.border}`,
+                      }} />
+                    </div>
+                    <button onClick={fetchPeriodo} style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '8px 14px', borderRadius: 10,
+                      border: `1px solid ${C.border}`, background: C.card, color: C.subtext,
+                      fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+                    }}>
+                      <IcRefresh /> Actualizar
+                    </button>
+                  </div>
+                  <h2 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: C.text }}>Período</h2>
+                </div>
+                <h2 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 600, color: C.text }}>
+                  Período: {fmtDT(resumenPeriodo.desde)} — {fmtDT(resumenPeriodo.hasta)}
+                </h2>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 20 }}>
+                  {[
+                    { label: 'Total ventas', value: fmt(resumenPeriodo.total_ventas), color: '#B6CD38' },
+                    { label: 'Núm. ventas', value: resumenPeriodo.num_ventas, color: '#8A6A4A' },
+                    { label: 'Paletas vendidas', value: fmtNum(resumenPeriodo.paletas_vendidas), color: '#00753F' },
+                    { label: 'Gastos', value: fmt(resumenPeriodo.total_gastos), color: '#E72D8B' },
+                    { label: 'Cortesías', value: fmt(resumenPeriodo.total_cortesias), color: '#E72D8B' },
+                    { label: 'Utilidad', value: fmt(resumenPeriodo.utilidad), color: resumenPeriodo.utilidad >= 0 ? '#B6CD38' : '#E72D8B' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} style={{ textAlign: 'center' }}>
+                      <p style={{ margin: 0, fontSize: 11, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 600 }}>{label}</p>
+                      <p style={{ margin: '6px 0 0', fontSize: 18, fontWeight: 700, color }}>{value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 16, textAlign: 'center' }}>
+                  <button onClick={cargarDetallePaletas} disabled={cargandoDetalle} style={{
+                    padding: '8px 16px', borderRadius: 10, border: `1px solid ${C.border}`,
+                    background: C.card, color: C.subtext, fontSize: 12, fontWeight: 600,
+                    cursor: cargandoDetalle ? 'default' : 'pointer', fontFamily: 'inherit',
+                  }}>
+                    {cargandoDetalle ? 'Cargando detalle...' : mostrarDetallePaletas ? 'Ocultar detalle' : 'Ver detalle de paletas'}
+                  </button>
+                </div>
+                {mostrarDetallePaletas && (
+                  detallePaletas.length === 0 ? (
+                    <p style={{ margin: '16px 0 0', fontSize: 13, color: C.subtext, textAlign: 'center' }}>Sin paletas vendidas en este período</p>
+                  ) : (
+                    <div style={{ marginTop: 16, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
+                      {detallePaletas.map((p, i) => (
+                        <div key={p.producto_id} style={{
+                          padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          borderBottom: i < detallePaletas.length - 1 ? `1px solid ${C.border}` : 'none',
+                        }}>
+                          <span style={{ fontSize: 13, color: C.text }}>{p.nombre}</span>
+                          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                            <span style={{ fontSize: 12, color: C.subtext }}>x{fmtNum(p.cantidad)}</span>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: '#B6CD38' }}>{fmt(p.total)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+
+            {/* Tarjeta Día */}
+            <div className="fade-in" style={{
+              background: C.card, border: `1px solid ${C.border}`,
+              borderRadius: 16, padding: '20px 24px', marginBottom: 20,
+              boxShadow: isDark ? '0 4px 20px -4px rgba(0,0,0,0.4)' : '0 4px 16px -4px rgba(29,84,125,0.08)',
+            }}>
+              <div className="fin-card-head" style={{ marginBottom: 20 }}>
+                <div className="fin-dates">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Fecha</span>
+                    <DateInput value={fecha} onChange={setFecha} isDark={isDark} style={{
+                      padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
+                      fontFamily: 'inherit', background: C.inputBg, color: C.text,
+                      border: `1px solid ${C.border}`,
+                    }} />
+                  </div>
+                  <button onClick={fetchDia} style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '8px 14px', borderRadius: 10,
+                    border: `1px solid ${C.border}`, background: C.card, color: C.subtext,
+                    fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+                  }}>
+                    <IcRefresh /> Actualizar
+                  </button>
+                </div>
+                <h2 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: C.text }}>Día</h2>
+              </div>
 
             {/* Métricas del día */}
             {!loading && resumenDia && (
-              <div className="fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 24 }}>
+              <div className="fade-in fin-grid-metrics">
                 {[
                   { label: 'Ventas', value: fmt(resumenDia.total_ventas), color: '#B6CD38' },
                   { label: 'Efectivo', value: fmt(resumenDia.total_efectivo), icon: IcCash, accent: '#00753F' },
                   { label: 'Tarjeta', value: fmt(resumenDia.total_tarjeta), icon: IcCard, accent: '#237AAA' },
                   { label: 'Transferencia', value: fmt(resumenDia.total_transferencia), icon: IcTransfer, accent: '#8A6A4A' },
                   { label: 'Cortesías', value: `${resumenDia.num_cortesias} · ${fmt(resumenDia.total_cortesias)}`, color: '#E72D8B' },
+                  { label: 'Paletas vendidas', value: fmtNum(resumenDia.paletas_vendidas), color: '#00753F' },
                   { label: 'Gastos', value: fmt(resumenDia.total_gastos), color: '#E72D8B' },
                   { label: 'Utilidad', value: fmt(resumenDia.utilidad), color: resumenDia.utilidad >= 0 ? '#B6CD38' : '#E72D8B' },
                   { label: 'Núm. ventas', value: resumenDia.num_ventas, color: '#8A6A4A' },
@@ -752,7 +889,7 @@ export default function Finanzas() {
             )}
 
             {!loading && (mejorVendedor || horaPico) && (
-              <div className="fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 24 }}>
+              <div className="fade-in fin-grid-metrics">
                 {mejorVendedor && (
                   <div style={{
                     background: C.card, border: `1px solid ${C.border}`,
@@ -788,7 +925,7 @@ export default function Finanzas() {
             {!loading && resumenDia?.productos_mas_vendidos?.length > 0 && (
               <div className="fade-in" style={{
                 background: C.card, border: `1px solid ${C.border}`,
-                borderRadius: 16, overflow: 'hidden', overflowX: 'auto', marginBottom: 24,
+                borderRadius: 16, overflow: 'hidden', overflowX: 'auto', WebkitOverflowScrolling: 'touch', marginBottom: 24,
                 boxShadow: isDark ? '0 4px 20px -4px rgba(0,0,0,0.4)' : '0 4px 16px -4px rgba(29,84,125,0.08)',
               }}>
                 <div style={{ minWidth: 360 }}>
@@ -810,33 +947,7 @@ export default function Finanzas() {
                 </div>
               </div>
             )}
-
-            {/* Resumen del período */}
-            {!loading && resumenPeriodo && (
-              <div className="fade-in" style={{
-                background: C.card, border: `1px solid ${C.border}`,
-                borderRadius: 16, padding: '20px 24px',
-                boxShadow: isDark ? '0 4px 20px -4px rgba(0,0,0,0.4)' : '0 4px 16px -4px rgba(29,84,125,0.08)',
-              }}>
-                <h2 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 600, color: C.text }}>
-                  Período: {fmtDT(resumenPeriodo.desde)} — {fmtDT(resumenPeriodo.hasta)}
-                </h2>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 20 }}>
-                  {[
-                    { label: 'Total ventas', value: fmt(resumenPeriodo.total_ventas), color: '#B6CD38' },
-                    { label: 'Núm. ventas', value: resumenPeriodo.num_ventas, color: '#8A6A4A' },
-                    { label: 'Gastos', value: fmt(resumenPeriodo.total_gastos), color: '#E72D8B' },
-                    { label: 'Cortesías', value: fmt(resumenPeriodo.total_cortesias), color: '#E72D8B' },
-                    { label: 'Utilidad', value: fmt(resumenPeriodo.utilidad), color: resumenPeriodo.utilidad >= 0 ? '#B6CD38' : '#E72D8B' },
-                  ].map(({ label, value, color }) => (
-                    <div key={label} style={{ textAlign: 'center' }}>
-                      <p style={{ margin: 0, fontSize: 11, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 600 }}>{label}</p>
-                      <p style={{ margin: '6px 0 0', fontSize: 18, fontWeight: 700, color }}>{value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            </div>
 
             {loading && (
               <div style={{ textAlign: 'center', padding: 40, color: C.subtext }}>Cargando...</div>
@@ -850,14 +961,14 @@ export default function Finanzas() {
             <div className="fade-in finanzas-filter" style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Desde</span>
-                <DateInput value={desde} onChange={setDesde} isDark={isDark} style={{
+                <DateInput value={gastoDesde} onChange={setGastoDesde} isDark={isDark} style={{
                   padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
                   fontFamily: 'inherit', background: C.card, color: C.text, border: `1px solid ${C.border}`,
                 }} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Hasta</span>
-                <DateInput value={hasta} onChange={setHasta} isDark={isDark} style={{
+                <DateInput value={gastoHasta} onChange={setGastoHasta} isDark={isDark} style={{
                   padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
                   fontFamily: 'inherit', background: C.card, color: C.text, border: `1px solid ${C.border}`,
                 }} />
@@ -885,7 +996,7 @@ export default function Finanzas() {
             {!loading && (
               <div className="fade-in" style={{
                 background: C.card, border: `1px solid ${C.border}`,
-                borderRadius: 16, overflow: 'hidden', overflowX: 'auto',
+                borderRadius: 16, overflow: 'hidden', overflowX: 'auto', WebkitOverflowScrolling: 'touch',
                 boxShadow: isDark ? '0 4px 20px -4px rgba(0,0,0,0.4)' : '0 4px 16px -4px rgba(29,84,125,0.08)',
               }}>
                 <div style={{ minWidth: 520 }}>
@@ -958,7 +1069,7 @@ export default function Finanzas() {
             {!loading && (
               <div className="fade-in" style={{
                 background: C.card, border: `1px solid ${C.border}`,
-                borderRadius: 16, overflow: 'hidden', overflowX: 'auto',
+                borderRadius: 16, overflow: 'hidden', overflowX: 'auto', WebkitOverflowScrolling: 'touch',
                 boxShadow: isDark ? '0 4px 20px -4px rgba(0,0,0,0.4)' : '0 4px 16px -4px rgba(29,84,125,0.08)',
               }}>
                 <div style={{ minWidth: 860 }}>

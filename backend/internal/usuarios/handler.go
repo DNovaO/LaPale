@@ -114,6 +114,42 @@ func (h *Handler) UpdateEstado(c *fiber.Ctx) error {
 	return response.Success(c, fiber.Map{"message": "estado actualizado"})
 }
 
+func (h *Handler) Delete(c *fiber.Ctx) error {
+	claims := auth.GetClaims(c)
+	id := c.Params("id")
+
+	u, err := h.service.GetByID(id)
+	if err != nil {
+		return response.Error(c, 500, "error al obtener usuario")
+	}
+	if u == nil {
+		return response.Error(c, 404, "usuario no encontrado")
+	}
+
+	if err := h.service.Delete(id, claims.UserID); err != nil {
+		switch {
+		case errors.Is(err, ErrUsuarioNoEncontrado):
+			return response.Error(c, 404, "usuario no encontrado")
+		case errors.Is(err, ErrAutoEliminacion), errors.Is(err, ErrUltimoAdmin):
+			return response.Error(c, 400, err.Error())
+		default:
+			return response.Error(c, 500, "error al eliminar usuario")
+		}
+	}
+
+	h.bitacora.Log(bitacora.Registro{
+		UsuarioID:   claims.UserID,
+		SucursalID:  claims.SucursalID,
+		Modulo:      bitacora.ModuloUsuarios,
+		Accion:      bitacora.AccionEliminar,
+		Entidad:     "usuarios",
+		EntidadID:   id,
+		DatosNuevos: fiber.Map{"nombre": u.Nombre, "username": u.Username},
+		IPAddress:   c.IP(),
+	})
+	return response.Success(c, fiber.Map{"message": "usuario eliminado"})
+}
+
 func (h *Handler) ChangePassword(c *fiber.Ctx) error {
 	id := c.Params("id")
 	var req ChangePasswordRequest

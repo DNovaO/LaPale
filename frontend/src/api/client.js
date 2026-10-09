@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { expireSession } from '@/session'
 
 const client = axios.create({
   baseURL: '/api',
@@ -13,14 +14,14 @@ client.interceptors.request.use(config => {
   return config
 })
 
-// Manejar 401 globalmente
+// Manejar 401 globalmente: redirección inmediata a login.
+// Se excluye el propio login para no convertir credenciales inválidas en sesión expirada.
 client.interceptors.response.use(
   res => res,
   err => {
-    if (err.response?.status === 401) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      window.location.href = '/login'
+    const url = String(err.config?.url || '')
+    if (err.response?.status === 401 && !url.includes('/auth/login')) {
+      expireSession('expired')
     }
     return Promise.reject(err)
   }
