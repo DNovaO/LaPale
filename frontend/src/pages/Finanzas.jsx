@@ -243,8 +243,8 @@ function DateInput({ value, onChange, style, isDark, placeholder = 'DD/MM/AAAA' 
   }
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative' }}>
-      <div style={{ position: 'relative', display: 'flex' }}>
+    <div ref={wrapRef} style={{ position: 'relative', width: '100%', minWidth: 0 }}>
+      <div style={{ position: 'relative', display: 'flex', width: '100%' }}>
         <input
           type="text"
           inputMode="numeric"
@@ -253,12 +253,13 @@ function DateInput({ value, onChange, style, isDark, placeholder = 'DD/MM/AAAA' 
           onFocus={openCalendar}
           onBlur={handleBlur}
           placeholder={placeholder}
-          style={{ ...style, paddingRight: 36, width: '100%', boxSizing: 'border-box', cursor: 'pointer' }}
+          style={{ ...style, paddingRight: 36, width: '100%', minWidth: 0, boxSizing: 'border-box', cursor: 'pointer', lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
         />
-        <button type="button" onClick={openCal} title="Abrir calendario" style={{
+        <button type="button" onMouseDown={e => e.preventDefault()} onClick={openCal} title="Abrir calendario" style={{
           position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
           background: 'none', border: 'none', cursor: 'pointer', color: cSub,
-          display: 'flex', alignItems: 'center', padding: 4, borderRadius: 6,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          width: 24, height: 24, padding: 4, borderRadius: 6,
         }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
@@ -269,7 +270,7 @@ function DateInput({ value, onChange, style, isDark, placeholder = 'DD/MM/AAAA' 
       {open && createPortal(
         <div ref={popRef} style={{
           position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999,
-          width: 244, padding: 12, borderRadius: 14,
+          width: 248, maxWidth: 'calc(100vw - 16px)', padding: 12, borderRadius: 14, boxSizing: 'border-box',
           background: isDark ? '#0a1929' : 'white',
           border: `1px solid ${cBorder}`,
           boxShadow: isDark ? '0 16px 40px -8px rgba(0,0,0,0.7)' : '0 16px 40px -8px rgba(29,84,125,0.25)',
@@ -279,12 +280,12 @@ function DateInput({ value, onChange, style, isDark, placeholder = 'DD/MM/AAAA' 
             <span style={{ fontSize: 13, fontWeight: 600, color: cText }}>{MESES[view.getMonth()]} {view.getFullYear()}</span>
             <button type="button" style={navBtn} onClick={() => setView(v => new Date(v.getFullYear(), v.getMonth() + 1, 1))}>›</button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 6 }}>
             {DIAS_SEM.map(d => (
               <span key={d} style={{ fontSize: 10, fontWeight: 600, color: cSub, textAlign: 'center', padding: '2px 0' }}>{d}</span>
             ))}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
             {buildGrid().map((d, i) => d === null ? <span key={i} /> : (
               <button key={i} type="button" onClick={() => selectDay(d)} style={{
                 aspectRatio: '1', border: 'none', cursor: 'pointer', borderRadius: 8,
@@ -690,15 +691,21 @@ export default function Finanzas() {
           .finanzas-tabs { width: 100% !important; }
           .finanzas-tabs button { flex: 1; text-align: center; white-space: nowrap; }
           .finanzas-filter { flex-direction: column !important; align-items: stretch !important; }
+          .finanzas-filter .fin-date-field { width: 100%; min-width: 0; }
         }
-        .fin-card-head { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; }
-        .fin-card-head .fin-dates { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+        .fin-card-head { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; }
+        .fin-card-head .fin-dates { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; min-width: 0; }
+        .fin-date-field { width: 160px; min-width: 140px; max-width: 100%; display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; min-width: 0; }
+        .fin-date-field input { height: 36px; }
+        .fin-dates .fin-btn { height: 36px; flex-shrink: 0; white-space: nowrap; align-self: flex-end; }
+        .finanzas-filter .fin-date-field { width: 160px; }
         .fin-grid-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
         .fin-table-scroll { -webkit-overflow-scrolling: touch; }
         @media (max-width: 640px) {
           .fin-card-head { flex-direction: column; align-items: stretch; }
           .fin-card-head > h2 { order: -1; }
-          .fin-card-head .fin-dates { display: grid; grid-template-columns: 1fr 1fr; }
+          .fin-card-head .fin-dates { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px; }
+          .fin-card-head .fin-dates .fin-date-field { width: 100%; min-width: 0; }
           .fin-card-head .fin-dates button { grid-column: 1 / -1; width: 100%; justify-content: center; }
           .fin-grid-metrics { grid-template-columns: 1fr 1fr; gap: 10px; }
           .fin-grid-metrics > div { padding: 12px !important; }
@@ -706,7 +713,7 @@ export default function Finanzas() {
         }
         @media (max-width: 380px) {
           .fin-grid-metrics { grid-template-columns: 1fr; }
-          .fin-card-head .fin-dates { grid-template-columns: 1fr; }
+          .fin-card-head .fin-dates { grid-template-columns: minmax(0,1fr); }
         }
       `}</style>
 
@@ -741,91 +748,6 @@ export default function Finanzas() {
         {/* Tab: Resumen */}
         {tab === 'resumen' && (
           <>
-            {!loading && resumenPeriodo && (
-              <div className="fade-in" style={{
-                background: C.card, border: `1px solid ${C.border}`,
-                borderRadius: 16, padding: '20px 24px', marginBottom: 20,
-                boxShadow: isDark ? '0 4px 20px -4px rgba(0,0,0,0.4)' : '0 4px 16px -4px rgba(29,84,125,0.08)',
-              }}>
-                <div className="fin-card-head" style={{ marginBottom: 16 }}>
-                  <div className="fin-dates">
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Desde</span>
-                      <DateInput value={rangoDesde} onChange={setRangoDesde} isDark={isDark} style={{
-                        padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
-                        fontFamily: 'inherit', background: C.inputBg, color: C.text,
-                        border: `1px solid ${C.border}`,
-                      }} />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Hasta</span>
-                      <DateInput value={rangoHasta} onChange={setRangoHasta} isDark={isDark} style={{
-                        padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
-                        fontFamily: 'inherit', background: C.inputBg, color: C.text,
-                        border: `1px solid ${C.border}`,
-                      }} />
-                    </div>
-                    <button onClick={fetchPeriodo} style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '8px 14px', borderRadius: 10,
-                      border: `1px solid ${C.border}`, background: C.card, color: C.subtext,
-                      fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
-                    }}>
-                      <IcRefresh /> Actualizar
-                    </button>
-                  </div>
-                  <h2 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: C.text }}>Período</h2>
-                </div>
-                <h2 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 600, color: C.text }}>
-                  Período: {fmtDT(resumenPeriodo.desde)} — {fmtDT(resumenPeriodo.hasta)}
-                </h2>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 20 }}>
-                  {[
-                    { label: 'Total ventas', value: fmt(resumenPeriodo.total_ventas), color: '#B6CD38' },
-                    { label: 'Núm. ventas', value: resumenPeriodo.num_ventas, color: '#8A6A4A' },
-                    { label: 'Paletas vendidas', value: fmtNum(resumenPeriodo.paletas_vendidas), color: '#00753F' },
-                    { label: 'Gastos', value: fmt(resumenPeriodo.total_gastos), color: '#E72D8B' },
-                    { label: 'Cortesías', value: fmt(resumenPeriodo.total_cortesias), color: '#E72D8B' },
-                    { label: 'Utilidad', value: fmt(resumenPeriodo.utilidad), color: resumenPeriodo.utilidad >= 0 ? '#B6CD38' : '#E72D8B' },
-                  ].map(({ label, value, color }) => (
-                    <div key={label} style={{ textAlign: 'center' }}>
-                      <p style={{ margin: 0, fontSize: 11, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 600 }}>{label}</p>
-                      <p style={{ margin: '6px 0 0', fontSize: 18, fontWeight: 700, color }}>{value}</p>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ marginTop: 16, textAlign: 'center' }}>
-                  <button onClick={cargarDetallePaletas} disabled={cargandoDetalle} style={{
-                    padding: '8px 16px', borderRadius: 10, border: `1px solid ${C.border}`,
-                    background: C.card, color: C.subtext, fontSize: 12, fontWeight: 600,
-                    cursor: cargandoDetalle ? 'default' : 'pointer', fontFamily: 'inherit',
-                  }}>
-                    {cargandoDetalle ? 'Cargando detalle...' : mostrarDetallePaletas ? 'Ocultar detalle' : 'Ver detalle de paletas'}
-                  </button>
-                </div>
-                {mostrarDetallePaletas && (
-                  detallePaletas.length === 0 ? (
-                    <p style={{ margin: '16px 0 0', fontSize: 13, color: C.subtext, textAlign: 'center' }}>Sin paletas vendidas en este período</p>
-                  ) : (
-                    <div style={{ marginTop: 16, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-                      {detallePaletas.map((p, i) => (
-                        <div key={p.producto_id} style={{
-                          padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                          borderBottom: i < detallePaletas.length - 1 ? `1px solid ${C.border}` : 'none',
-                        }}>
-                          <span style={{ fontSize: 13, color: C.text }}>{p.nombre}</span>
-                          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                            <span style={{ fontSize: 12, color: C.subtext }}>x{fmtNum(p.cantidad)}</span>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: '#B6CD38' }}>{fmt(p.total)}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                )}
-              </div>
-            )}
-
             {/* Tarjeta Día */}
             <div className="fade-in" style={{
               background: C.card, border: `1px solid ${C.border}`,
@@ -834,7 +756,7 @@ export default function Finanzas() {
             }}>
               <div className="fin-card-head" style={{ marginBottom: 20 }}>
                 <div className="fin-dates">
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div className="fin-date-field">
                     <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Fecha</span>
                     <DateInput value={fecha} onChange={setFecha} isDark={isDark} style={{
                       padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
@@ -842,7 +764,7 @@ export default function Finanzas() {
                       border: `1px solid ${C.border}`,
                     }} />
                   </div>
-                  <button onClick={fetchDia} style={{
+                  <button className="fin-btn" onClick={fetchDia} style={{
                     display: 'flex', alignItems: 'center', gap: 6,
                     padding: '8px 14px', borderRadius: 10,
                     border: `1px solid ${C.border}`, background: C.card, color: C.subtext,
@@ -949,6 +871,93 @@ export default function Finanzas() {
             )}
             </div>
 
+{!loading && resumenPeriodo && (
+              <div className="fade-in" style={{
+                background: C.card, border: `1px solid ${C.border}`,
+                borderRadius: 16, padding: '20px 24px', marginBottom: 20,
+                boxShadow: isDark ? '0 4px 20px -4px rgba(0,0,0,0.4)' : '0 4px 16px -4px rgba(29,84,125,0.08)',
+              }}>
+                <div className="fin-card-head" style={{ marginBottom: 16 }}>
+                  <div className="fin-dates">
+                    <div className="fin-date-field">
+                      <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Desde</span>
+                      <DateInput value={rangoDesde} onChange={setRangoDesde} isDark={isDark} style={{
+                        padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
+                        fontFamily: 'inherit', background: C.inputBg, color: C.text,
+                        border: `1px solid ${C.border}`,
+                      }} />
+                    </div>
+                    <div className="fin-date-field">
+                      <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Hasta</span>
+                      <DateInput value={rangoHasta} onChange={setRangoHasta} isDark={isDark} style={{
+                        padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
+                        fontFamily: 'inherit', background: C.inputBg, color: C.text,
+                        border: `1px solid ${C.border}`,
+                      }} />
+                    </div>
+                    <button className="fin-btn" onClick={fetchPeriodo} style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '8px 14px', borderRadius: 10,
+                      border: `1px solid ${C.border}`, background: C.card, color: C.subtext,
+                      fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+                    }}>
+                      <IcRefresh /> Actualizar
+                    </button>
+                  </div>
+                  <h2 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: C.text }}>Período</h2>
+                </div>
+                <h2 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 600, color: C.text }}>
+                  Período: {fmtDT(resumenPeriodo.desde)} — {fmtDT(resumenPeriodo.hasta)}
+                </h2>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 20 }}>
+                  {[
+                    { label: 'Total ventas', value: fmt(resumenPeriodo.total_ventas), color: '#B6CD38' },
+                    { label: 'Núm. ventas', value: resumenPeriodo.num_ventas, color: '#8A6A4A' },
+                    { label: 'Paletas vendidas', value: fmtNum(resumenPeriodo.paletas_vendidas), color: '#00753F' },
+                    { label: 'Gastos', value: fmt(resumenPeriodo.total_gastos), color: '#E72D8B' },
+                    { label: 'Cortesías', value: fmt(resumenPeriodo.total_cortesias), color: '#E72D8B' },
+                    { label: 'Utilidad', value: fmt(resumenPeriodo.utilidad), color: resumenPeriodo.utilidad >= 0 ? '#B6CD38' : '#E72D8B' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} style={{ textAlign: 'center' }}>
+                      <p style={{ margin: 0, fontSize: 11, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 600 }}>{label}</p>
+                      <p style={{ margin: '6px 0 0', fontSize: 18, fontWeight: 700, color }}>{value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 16, textAlign: 'center' }}>
+                  <button onClick={cargarDetallePaletas} disabled={cargandoDetalle} style={{
+                    padding: '8px 16px', borderRadius: 10, border: `1px solid ${C.border}`,
+                    background: C.card, color: C.subtext, fontSize: 12, fontWeight: 600,
+                    cursor: cargandoDetalle ? 'default' : 'pointer', fontFamily: 'inherit',
+                  }}>
+                    {cargandoDetalle ? 'Cargando detalle...' : mostrarDetallePaletas ? 'Ocultar detalle' : 'Ver detalle de paletas'}
+                  </button>
+                </div>
+                {mostrarDetallePaletas && (
+                  detallePaletas.length === 0 ? (
+                    <p style={{ margin: '16px 0 0', fontSize: 13, color: C.subtext, textAlign: 'center' }}>Sin paletas vendidas en este período</p>
+                  ) : (
+                    <div style={{ marginTop: 16, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
+                      {detallePaletas.map((p, i) => (
+                        <div key={p.producto_id} style={{
+                          padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          borderBottom: i < detallePaletas.length - 1 ? `1px solid ${C.border}` : 'none',
+                        }}>
+                          <span style={{ fontSize: 13, color: C.text }}>{p.nombre}</span>
+                          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                            <span style={{ fontSize: 12, color: C.subtext }}>x{fmtNum(p.cantidad)}</span>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: '#B6CD38' }}>{fmt(p.total)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+
+            
+
             {loading && (
               <div style={{ textAlign: 'center', padding: 40, color: C.subtext }}>Cargando...</div>
             )}
@@ -959,14 +968,14 @@ export default function Finanzas() {
         {tab === 'gastos' && (
           <>
             <div className="fade-in finanzas-filter" style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div className="fin-date-field">
                 <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Desde</span>
                 <DateInput value={gastoDesde} onChange={setGastoDesde} isDark={isDark} style={{
                   padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
                   fontFamily: 'inherit', background: C.card, color: C.text, border: `1px solid ${C.border}`,
                 }} />
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div className="fin-date-field">
                 <span style={{ fontSize: 10, fontWeight: 600, color: C.subtext, textTransform: 'uppercase', letterSpacing: '.05em' }}>Hasta</span>
                 <DateInput value={gastoHasta} onChange={setGastoHasta} isDark={isDark} style={{
                   padding: '8px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
@@ -974,7 +983,7 @@ export default function Finanzas() {
                 }} />
               </div>
               <button onClick={fetchData} style={{
-                display: 'flex', alignItems: 'center', gap: 6,
+                display: 'flex', alignItems: 'center', gap: 6, height: 36, flexShrink: 0, whiteSpace: 'nowrap',
                 padding: '8px 14px', borderRadius: 10,
                 border: `1px solid ${C.border}`, background: C.card, color: C.subtext,
                 fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
@@ -1152,7 +1161,7 @@ export default function Finanzas() {
             </select>
           </Field>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 12 }}>
             <Field label="Monto *">
               <input type="number" min="0.01" step="0.01" placeholder="0.00" value={formGasto.monto} onChange={e => setFormGasto(f => ({ ...f, monto: e.target.value }))} style={{
                 padding: '9px 12px', borderRadius: 10, fontSize: 13, outline: 'none',
